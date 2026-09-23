@@ -1,0 +1,13 @@
+[Unit]
+Description=API Survey dumpcap capture
+After=network.target
+[Service]
+Type=simple
+User=apisurvey
+Group=wireshark
+ExecStart=/usr/bin/dumpcap -i any -s 0 -B 64 -b duration:300 -b filesize:51200 -b files:288 -w /var/lib/api-survey-ai/capture/incoming/traffic.pcapng
+Restart=on-failure
+NoNewPrivileges=true
+PrivateTmp=true
+[Install]
+WantedBy=multi-user.target
