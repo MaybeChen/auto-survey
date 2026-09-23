@@ -29,7 +29,7 @@ cp config/config.example.yaml config.yaml
    python --version
    ```
 
-2. 从 Wireshark 官方 Windows 安装器安装 Wireshark，组件选择页面保留 **TShark**。**并非所有安装场景都会显示 Npcap 页面**：安装器检测到已有兼容 Npcap 时可能跳过；Microsoft Store/便携版、组织重新打包的软件或某些离线安装包也可能不捆绑 Npcap。Npcap 有时会以独立的子安装程序窗口出现，而不是 Wireshark 的“组件”复选框。
+2. 从 Wireshark 下载页选择安装包：绝大多数采用 Intel 或 AMD CPU 的 Windows 10/11/Server 电脑请选择 **Windows x64 Installer**；只有“系统类型”明确显示 ARM64（例如部分 Snapdragon Windows 设备）时才选择 **Windows Arm64 Installer**。不要选择 **Windows x64 PortableApps**，因为便携版不适合安装 Npcap 驱动和部署无人值守计划任务。可在“设置 → 系统 → 系统信息 → 系统类型”确认架构，或执行 `$env:PROCESSOR_ARCHITECTURE`（`AMD64` 选择 x64，`ARM64` 选择 Arm64）。安装 Wireshark 时，组件选择页面保留 **TShark**。**并非所有安装场景都会显示 Npcap 页面**：安装器检测到已有兼容 Npcap 时可能跳过；Microsoft Store/便携版、组织重新打包的软件或某些离线安装包也可能不捆绑 Npcap。Npcap 有时会以独立的子安装程序窗口出现，而不是 Wireshark 的“组件”复选框。
 3. 在“应用和功能”或“已安装的应用”中检查是否存在 **Npcap**。也可以在 PowerShell 中检查服务：
 
    ```powershell
