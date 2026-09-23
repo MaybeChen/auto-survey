@@ -29,8 +29,16 @@ cp config/config.example.yaml config.yaml
    python --version
    ```
 
-2. 从 Wireshark 官方安装器安装 Wireshark。组件选择页面保留 **TShark**，Npcap 页面选择安装 **Npcap**。系统已安装旧版 WinPcap/Npcap 时，建议先升级到 Wireshark 安装器提供的兼容版本。
-3. 安装完成后关闭并重新打开 PowerShell，验证工具。程序先查找 `PATH`，找不到时再查找 `C:\Program Files\Wireshark`：
+2. 从 Wireshark 官方 Windows 安装器安装 Wireshark，组件选择页面保留 **TShark**。**并非所有安装场景都会显示 Npcap 页面**：安装器检测到已有兼容 Npcap 时可能跳过；Microsoft Store/便携版、组织重新打包的软件或某些离线安装包也可能不捆绑 Npcap。Npcap 有时会以独立的子安装程序窗口出现，而不是 Wireshark 的“组件”复选框。
+3. 在“应用和功能”或“已安装的应用”中检查是否存在 **Npcap**。也可以在 PowerShell 中检查服务：
+
+   ```powershell
+   Get-Service npcap -ErrorAction SilentlyContinue
+   Test-Path "$env:SystemRoot\System32\Npcap\wpcap.dll"
+   ```
+
+   如果两项都没有结果，应从 **Npcap 官方网站**单独下载安装，然后重启 Windows。不要仅安装旧版 WinPcap；本项目在 Windows 10/11/Server 上使用 Npcap。企业电脑若无法安装，需让管理员允许 Npcap 驱动安装。
+4. 安装完成后关闭并重新打开 PowerShell，验证工具。程序先查找 `PATH`，找不到时再查找 `C:\Program Files\Wireshark`：
 
    ```powershell
    & 'C:\Program Files\Wireshark\tshark.exe' --version
@@ -38,7 +46,7 @@ cp config/config.example.yaml config.yaml
    & 'C:\Program Files\Wireshark\dumpcap.exe' -D
    ```
 
-   `dumpcap -D` 会输出接口编号和名称，例如 `1. \Device\NPF_{...} (Ethernet)`。记录要抓取的接口编号；没有接口通常表示 Npcap 未正确安装，需要修复 Wireshark/Npcap 安装并重启 Windows。
+   `dumpcap -D` 会输出接口编号和名称，例如 `1. \Device\NPF_{...} (Ethernet)`。记录要抓取的接口编号。只要该命令能够正常列出接口，Npcap 就已经可供 dumpcap 使用，即使安装 Wireshark 时没有看见 Npcap 页面。若 `tshark`/`dumpcap` 存在但 `dumpcap -D` 不显示接口或提示找不到捕获驱动，再单独修复或安装 Npcap，并检查 `npcap` 服务。
 
 #### 2. 安装 Python 程序
 
@@ -163,6 +171,7 @@ Authorization、Cookie、API key、密码、token、手机号等配置化字段�
 ## 故障排查
 
 * “tshark/dumpcap not found”：安装 Wireshark CLI，并检查 PATH 或配置绝对路径。
+* Wireshark 安装时没有 Npcap 页面：先运行 `Get-Service npcap` 和 `dumpcap -D`；能列出接口就无需重复安装，否则从 Npcap 官方安装程序单独安装。Microsoft Store/便携版或企业重打包版本可能不附带 Npcap。
 * dumpcap permission denied：配置 wireshark 组/capabilities；Agent 不应以 root 运行。
 * `BLOCKED_TLS`：V1 不猜测 TLS 明文，请提供明文 HTTP 测试流量。
 * `FAILED`：运行 `status` 并查看一致格式的服务日志；数据库保留 error 与状态。
