@@ -19,7 +19,119 @@ cp config/config.example.yaml config.yaml
 
 ### Windows 10/11/Server
 
-从 Wireshark 官方安装器安装 Wireshark CLI、dumpcap 与 Npcap，工具会从 `PATH` 或 `C:/Program Files/Wireshark` 查找。运行 `deploy/windows/install.ps1`，编辑 Windows 示例配置，然后以管理员身份运行 `install_task.ps1`。它创建开机启动且失败重试的 **API Survey Capture** 与 **API Survey Agent** 任务，日志写入 `logs/`。
+以下命令均在项目根目录执行。建议将项目放在不会被移动的固定位置，例如 `C:\api-survey-ai`；计划任务会保存脚本的绝对路径。
+
+#### 1. 安装基础软件
+
+1. 安装 **64 位 Python 3.11 或更高版本**。安装器中勾选 **Add python.exe to PATH**，然后在新的 PowerShell 窗口确认：
+
+   ```powershell
+   python --version
+   ```
+
+2. 从 Wireshark 官方安装器安装 Wireshark。组件选择页面保留 **TShark**，Npcap 页面选择安装 **Npcap**。系统已安装旧版 WinPcap/Npcap 时，建议先升级到 Wireshark 安装器提供的兼容版本。
+3. 安装完成后关闭并重新打开 PowerShell，验证工具。程序先查找 `PATH`，找不到时再查找 `C:\Program Files\Wireshark`：
+
+   ```powershell
+   & 'C:\Program Files\Wireshark\tshark.exe' --version
+   & 'C:\Program Files\Wireshark\dumpcap.exe' --version
+   & 'C:\Program Files\Wireshark\dumpcap.exe' -D
+   ```
+
+   `dumpcap -D` 会输出接口编号和名称，例如 `1. \Device\NPF_{...} (Ethernet)`。记录要抓取的接口编号；没有接口通常表示 Npcap 未正确安装，需要修复 Wireshark/Npcap 安装并重启 Windows。
+
+#### 2. 安装 Python 程序
+
+普通 PowerShell 即可执行安装脚本。若系统执行策略阻止本地脚本，只对本次进程临时放行：
+
+```powershell
+cd C:\api-survey-ai
+Set-ExecutionPolicy -Scope Process Bypass
+.\deploy\windows\install.ps1
+```
+
+脚本会创建 `.venv`、安装当前项目、创建 `logs`，并在不存在时将 `config/config.windows.example.yaml` 复制为 `config.yaml`。它不会覆盖已有配置。
+
+#### 3. 配置数据目录和抓包接口
+
+编辑项目根目录的 `config.yaml`，至少修改以下项目：
+
+```yaml
+storage:
+  root: "D:/api-survey-ai-data"   # SYSTEM 账户必须有写权限
+capture:
+  backend: "dumpcap"
+  interface: "1"                 # 使用 dumpcap -D 显示的编号或设备名
+  filter: "tcp port 80"          # 空字符串表示不过滤；V1 只能分析明文 HTTP
+```
+
+路径推荐使用正斜杠。确认数据盘有足够空间；默认轮转上限约为 `filesize_kb × files`。如启用 AI，API Key 不能写进 YAML，应设置为机器级环境变量，以便 `SYSTEM` 计划任务读取：
+
+```powershell
+[Environment]::SetEnvironmentVariable('AI_API_KEY', '实际密钥', 'Machine')
+```
+
+设置后需重启计划任务。命令会把密钥保存在 Windows 机器级环境中；应按组织的凭据管理要求保护该主机。AI 默认关闭，不配置密钥也能生成基础接口事实层。
+
+#### 4. 安装前手工验证
+
+先确认适配器能列出接口，再分别进行短时间抓包和分析验证：
+
+```powershell
+.\.venv\Scripts\api-survey.exe --config config.yaml list-interfaces
+.\.venv\Scripts\python.exe -m src.capture_service --config config.yaml
+```
+
+第二条命令会持续抓包并按配置轮转；访问一个明文 HTTP 服务产生测试流量，等待生成 pcapng 后按 `Ctrl+C` 停止。然后启动监听分析器：
+
+```powershell
+.\.venv\Scripts\api-survey.exe --config config.yaml watch
+```
+
+watch 只处理已稳定的文件，默认需等待文件停止修改 20 秒并连续两次大小一致。可按 `Ctrl+C` 停止，并检查：
+
+```text
+D:/api-survey-ai-data/state/agent.db
+D:/api-survey-ai-data/output/api-catalog.json
+D:/api-survey-ai-data/output/interfaces/
+D:/api-survey-ai-data/output/openapi/
+```
+
+#### 5. 注册无人值守计划任务
+
+以**管理员身份**打开 PowerShell，进入项目目录后执行：
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\deploy\windows\install_task.ps1
+```
+
+脚本创建并立即启动以下任务：
+
+* **API Survey Capture**：以 `SYSTEM` 身份运行 `src.capture_service`，启动 dumpcap 并把轮转文件写入 `capture/incoming`。
+* **API Survey Agent**：以 `SYSTEM` 身份运行 `api-survey watch`，等待稳定文件并执行分析。
+
+两个任务均在系统启动时触发，失败后每分钟重试，最多 100 次，并启用 `StartWhenAvailable`。项目目录和 `storage.root` 不能依赖某个登录用户的映射网络盘；服务场景应使用本地盘或授予 `SYSTEM` 权限的 UNC 路径。
+
+#### 6. 检查、重启和卸载任务
+
+```powershell
+Get-ScheduledTask -TaskName 'API Survey *' | Format-Table TaskName, State
+Get-ScheduledTaskInfo -TaskName 'API Survey Capture'
+Get-ScheduledTaskInfo -TaskName 'API Survey Agent'
+Get-Content .\logs\capture.log -Tail 100
+Get-Content .\logs\agent.log -Tail 100
+
+Stop-ScheduledTask -TaskName 'API Survey Capture'
+Start-ScheduledTask -TaskName 'API Survey Capture'
+Stop-ScheduledTask -TaskName 'API Survey Agent'
+Start-ScheduledTask -TaskName 'API Survey Agent'
+
+Unregister-ScheduledTask -TaskName 'API Survey Capture' -Confirm:$false
+Unregister-ScheduledTask -TaskName 'API Survey Agent' -Confirm:$false
+```
+
+修改 `config.yaml` 或机器级 AI 环境变量后，应重启两个任务。`LastTaskResult = 0` 表示上次正常退出；非零时优先查看 `logs/capture.log`、`logs/agent.log` 和 Windows 任务计划程序历史记录。常见问题包括接口编号变化、Npcap 未运行、`SYSTEM` 对数据目录无写权限、磁盘空间不足，以及流量实际为 HTTPS（此时 V1 会标记 `BLOCKED_TLS`，不会尝试破解）。
 
 ### Ubuntu/Debian 与 RHEL/Rocky/AlmaLinux
 
