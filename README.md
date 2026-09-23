@@ -38,6 +38,16 @@ cp config/config.example.yaml config.yaml
    ```
 
    如果两项都没有结果，应从 **Npcap 官方网站**单独下载安装，然后重启 Windows。不要仅安装旧版 WinPcap；本项目在 Windows 10/11/Server 上使用 Npcap。企业电脑若无法安装，需让管理员允许 Npcap 驱动安装。
+
+   Npcap 的 **Installation Options** 页面建议按下表选择：
+
+   | 选项 | 默认建议 | 说明 |
+   | --- | --- | --- |
+   | Restrict Npcap driver's access to Administrators only | **不勾选** | 最容易完成首次验证；勾选后普通 PowerShell 不能抓包，必须使用管理员进程。生产环境若要求最小权限可以勾选，本项目的 `SYSTEM` 计划任务仍可抓包。 |
+   | Support raw 802.11 traffic (and monitor mode) for wireless adapters | **不勾选** | 普通 Wi-Fi 上网流量不需要；只有明确需要 Wi-Fi Monitor Mode、原始 802.11 帧时才勾选。 |
+   | Install Npcap in WinPcap API-compatible Mode | **不勾选** | Wireshark、TShark 和 dumpcap 原生支持 Npcap；仅遗留程序只能识别 WinPcap 时才使用，该选项还可能替换已有 WinPcap。 |
+
+   因此，本项目首次安装可保持截图中的三个选项**全部不勾选**，直接点击 **Install**。若这是受管控的生产服务器，可勾选第一项加强权限，但后续手工执行 `dumpcap -D` 和抓包测试时要使用管理员 PowerShell。不要为了抓普通 Wi-Fi HTTP 流量而勾选第二项。
 4. 安装完成后关闭并重新打开 PowerShell，验证工具。程序先查找 `PATH`，找不到时再查找 `C:\Program Files\Wireshark`：
 
    ```powershell
@@ -172,6 +182,7 @@ Authorization、Cookie、API key、密码、token、手机号等配置化字段�
 
 * “tshark/dumpcap not found”：安装 Wireshark CLI，并检查 PATH 或配置绝对路径。
 * Wireshark 安装时没有 Npcap 页面：先运行 `Get-Service npcap` 和 `dumpcap -D`；能列出接口就无需重复安装，否则从 Npcap 官方安装程序单独安装。Microsoft Store/便携版或企业重打包版本可能不附带 Npcap。
+* Npcap 安装提示 `Failed to completely uninstall Npcap; files in use by: svchost.exe`：通常表示机器上已有 Npcap，安装程序正在升级或重装，但旧驱动正被 Windows 网络服务占用。不要在任务管理器中强制结束 `svchost.exe`。先取消安装并运行 `Get-Service npcap`、`dumpcap -D`；若能列出接口即可继续使用现有版本。确需升级时，先停止 API Survey/Wireshark 等抓包程序并重启 Windows，登录后立即以管理员身份运行 Npcap 安装器；仍失败则从“已安装的应用”卸载 Npcap、重启，再安装新版。
 * dumpcap permission denied：配置 wireshark 组/capabilities；Agent 不应以 root 运行。
 * `BLOCKED_TLS`：V1 不猜测 TLS 明文，请提供明文 HTTP 测试流量。
 * `FAILED`：运行 `status` 并查看一致格式的服务日志；数据库保留 error 与状态。
