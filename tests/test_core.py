@@ -15,7 +15,7 @@ from src.output.interface_json import build_interface
 from src.output.openapi import generate_openapi
 from src.platform.factory import get_platform_adapter
 from src.platform.linux import LinuxPlatformAdapter
-from src.platform.windows import WindowsPlatformAdapter
+from src.platform.windows import NpcapUnavailableError, WindowsPlatformAdapter, _interfaces
 from src.redaction.redact import redact_transaction
 from src.transaction.body_decoder import decode_body
 from src.transaction.builder import build_transactions
@@ -31,6 +31,13 @@ def test_platform_factory_and_windows_linux_discovery():
     assert isinstance(get_platform_adapter("Linux"),LinuxPlatformAdapter)
     with patch("src.platform.windows.shutil.which",return_value="C:/Tools/tshark.exe"): assert WindowsPlatformAdapter().find_tshark()==Path("C:/Tools/tshark.exe")
     with patch("src.platform.linux.shutil.which",return_value="/usr/bin/tshark"): assert LinuxPlatformAdapter().find_tshark()==Path("/usr/bin/tshark")
+
+    failed = __import__("subprocess").CompletedProcess(
+        ["dumpcap", "-D"], 1, "", "Unable to load Npcap (wpcap.dll)"
+    )
+    with patch("src.platform.windows.subprocess.run", return_value=failed):
+        with pytest.raises(NpcapUnavailableError, match="Npcap could not be loaded"):
+            _interfaces(Path("dumpcap.exe"))
 
 def test_command_builders(tmp_path):
     args=build_http1_args(tmp_path/"a.pcapng"); assert args[:3]==["-2","-r",str(tmp_path/"a.pcapng")]; assert "http.request.method" in args
