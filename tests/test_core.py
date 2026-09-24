@@ -74,12 +74,37 @@ def test_recursive_redaction_normalization_grouping_observation():
     groups=group_transactions([sample_tx("/users/123"),sample_tx("/users/456")]); assert len(groups)==1; assert groups[0].observed_paths==["/users/123","/users/456"]
     obs=observe_fields([{"language":"en"},{"other":1}]); assert obs["language"]["observedPresence"]==.5; assert obs["language"]["observedTypes"]==["string"]
 
+def test_interface_records_request_body_presence() -> None:
+    without_body = Transaction(
+        id="without-body",
+        request=HTTPRequest(frame=1, method="GET", host="api.test", path="/health"),
+        response=HTTPResponse(frame=2, status=200, body={"ok": True}),
+    )
+    empty_body = Transaction(
+        id="empty-body",
+        request=HTTPRequest(
+            frame=3, method="POST", host="api.test", path="/objects", body={}
+        ),
+        response=HTTPResponse(frame=4, status=200, body={"ok": True}),
+    )
+    from src.validator.validator import validate_analysis
+
+    for transaction, expected in ((without_body, False), (empty_body, True)):
+        group = group_transactions([transaction])[0]
+        result = deterministic_analysis(group)
+        validation = validate_analysis(group, result)
+        document = build_interface(group, result, validation)
+        assert document["request"]["bodyObserved"] is expected
+        assert document["request"]["example"] == transaction.request.body
+
+
 def test_ai_result_validation_interface_and_openapi(tmp_path):
     with pytest.raises(ValidationError): EndpointAnalysisResult(normalized_path="/x",confidence=2)
     group=group_transactions([sample_tx()])[0]; result=deterministic_analysis(group)
     from src.validator.validator import validate_analysis
     validation=validate_analysis(group,result); assert validation["issues"]==[]
     document=build_interface(group,result,validation); assert document["responses"]["200"]["example"]=={"id":123,"ok":True}
+    assert document["request"]["bodyObserved"] is True
     spec=generate_openapi([document],tmp_path); assert spec["openapi"]=="3.1.0"; assert (tmp_path/"openapi.yaml").exists()
 
 def test_packaged_schema_is_available():

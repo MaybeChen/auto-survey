@@ -183,7 +183,7 @@ python -m src.agent --config config.yaml --once --input tests/fixtures/demo.pcap
 
 ## 数据、输出与安全
 
-目录自动创建为 `capture/incoming`、`work/{raw,transactions,redacted}` 与 `output/{interfaces,openapi,reports,samples}`。SQLite 默认关闭；仅当 `database.enabled: true` 时才创建 `state/agent.db`。核心产物 `output/interfaces/*.json` 包含 host/method/path、请求与响应 schema/example、样本统计、真实 observed path/status、置信度和未知项。`api-catalog.json` 建立资产索引；`openapi/openapi.{json,yaml}` **只由标准接口 JSON** 二次生成；`reports/analysis-summary.json` 记录摘要。
+目录自动创建为 `capture/incoming`、`work/{raw,transactions,redacted}` 与 `output/{interfaces,openapi,reports,samples}`。SQLite 默认关闭；仅当 `database.enabled: true` 时才创建 `state/agent.db`。核心产物 `output/interfaces/*.json` 包含 host/method/path、请求与响应 schema/example、样本统计、真实 observed path/status、置信度和未知项。`api-catalog.json` 建立资产索引；`openapi/openapi.{json,yaml}` **只由标准接口 JSON** 二次生成；`reports/analysis-summary.json` 记录摘要。 标准接口 JSON 的 `request.bodyObserved` 明确记录是否真实观测到请求体；OpenAPI 生成器依据该证据决定是否输出 `requestBody`，因此空对象、空数组、`0`、`false` 和空字符串不会被误删。旧接口 JSON 没有此标记时，仅将非 `null` 的 `request.example` 视为请求体证据；旧数据中的 JSON `null` 无法与未观测请求体可靠区分。
 
 Authorization、Cookie、API key、密码、token、手机号等配置化字段在嵌套对象/数组中递归替换为 `***`。外部 AI client 只接受内存中的脱敏 Transaction，不接收 pcap/raw 路径且没有 shell 能力。原始 pcap 永不自动删除。Validator 拒绝未观测状态、字段、路径和示例；低置信度或样本不足会进入 `PENDING_MORE_SAMPLES`。
 

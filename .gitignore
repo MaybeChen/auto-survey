@@ -58,13 +58,13 @@ $RECYCLE.BIN/
 .env
 .env.*
 !.env.example
-config.yaml
+/config.yaml
 config/config.yaml
 *.key
 *.pem
 
 # Runtime logs, PID files, and temporary files
-logs/
+/logs/
 *.log
 *.pid
 *.tmp
@@ -74,11 +74,11 @@ tmp/
 temp/
 
 # API Survey runtime storage (when storage.root points into the repository)
-data/
-capture/
-work/
-state/
-output/
+/data/
+/capture/
+/work/
+/state/
+/output/
 
 # Captures can contain credentials and sensitive payloads
 *.pcap
