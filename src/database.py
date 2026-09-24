@@ -1,11 +1,13 @@
 from __future__ import annotations
 from pathlib import Path
+from importlib.resources import files
 import hashlib,json,sqlite3
 from src.models import CaptureStatus,Transaction
 class Database:
     def __init__(self,path:Path):
         self.path=path; path.parent.mkdir(parents=True,exist_ok=True); self.connection=sqlite3.connect(path); self.connection.row_factory=sqlite3.Row; self.connection.execute("PRAGMA foreign_keys=ON")
-        schema=Path(__file__).parents[1]/"sql"/"schema.sql"; self.connection.executescript(schema.read_text(encoding="utf-8"))
+        schema = files("src.sql").joinpath("schema.sql").read_text(encoding="utf-8")
+        self.connection.executescript(schema)
     @staticmethod
     def sha256(path:Path)->str:
         digest=hashlib.sha256()

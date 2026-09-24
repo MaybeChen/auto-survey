@@ -70,6 +70,15 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 脚本会创建 `.venv`、安装当前项目、创建 `logs`，并在不存在时将 `config/config.windows.example.yaml` 复制为 `config.yaml`。它不会覆盖已有配置。
 
+如果执行 `api-survey --help` 报告 `ModuleNotFoundError: No module named 'src'`，说明虚拟环境安装的是早期未包含 Python 包的构建。请在项目根目录修复安装：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install --force-reinstall --no-deps .
+.\.venv\Scripts\api-survey.exe --help
+```
+
+不要只复制 `api-survey.exe`；控制台入口和 `src` Python 包必须由同一次 `pip install` 安装。
+
 #### 3. 配置数据目录和抓包接口
 
 编辑项目根目录的 `config.yaml`，至少修改以下项目：

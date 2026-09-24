@@ -70,6 +70,17 @@ def test_ai_result_validation_interface_and_openapi(tmp_path):
     document=build_interface(group,result,validation); assert document["responses"]["200"]["example"]=={"id":123,"ok":True}
     spec=generate_openapi([document],tmp_path); assert spec["openapi"]=="3.1.0"; assert (tmp_path/"openapi.yaml").exists()
 
+def test_packaged_schema_is_available():
+    from importlib.resources import files
+
+    schema = files("src.sql").joinpath("schema.sql").read_text(encoding="utf-8")
+    assert "CREATE TABLE IF NOT EXISTS capture_file" in schema
+    repository_schema = (Path(__file__).parents[1] / "sql" / "schema.sql").read_text(
+        encoding="utf-8"
+    )
+    assert schema == repository_schema
+
+
 def test_sqlite_dedup_and_recovery(tmp_path):
     capture=tmp_path/"demo.pcapng"; capture.write_bytes(b"fixture"); db=Database(tmp_path/"agent.db")
     ident,new=db.register_capture(capture); assert new; assert db.register_capture(capture)==(ident,False)
