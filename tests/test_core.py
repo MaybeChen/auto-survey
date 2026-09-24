@@ -84,5 +84,9 @@ def test_packaged_schema_is_available():
 def test_sqlite_dedup_and_recovery(tmp_path):
     capture=tmp_path/"demo.pcapng"; capture.write_bytes(b"fixture"); db=Database(tmp_path/"agent.db")
     ident,new=db.register_capture(capture); assert new; assert db.register_capture(capture)==(ident,False)
+    tx = sample_tx()
+    db.save_transaction(ident, tx)
+    saved = db.connection.execute('SELECT COUNT(*) FROM "transaction"').fetchone()[0]
+    assert saved == 1
     db.set_capture_status(ident,CaptureStatus.PARSING); assert db.recover_interrupted()==1
     status=db.connection.execute("SELECT status FROM capture_file WHERE id=?",(ident,)).fetchone()[0]; assert status=="STABLE"

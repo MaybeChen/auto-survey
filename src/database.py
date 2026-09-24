@@ -23,7 +23,7 @@ class Database:
     def set_capture_status(self,id_:int,status:CaptureStatus,error:str|None=None,stats:dict|None=None)->None:
         self.connection.execute("UPDATE capture_file SET status=?,error=?,protocol_stats=COALESCE(?,protocol_stats),updated_at=CURRENT_TIMESTAMP WHERE id=?",(status,error,json.dumps(stats) if stats else None,id_)); self.connection.commit()
     def save_transaction(self,capture_id:int,tx:Transaction)->None:
-        self.connection.execute("INSERT OR IGNORE INTO transaction(id,capture_file_id,payload) VALUES(?,?,?)",(tx.id,capture_id,tx.model_dump_json())); self.connection.commit()
+        self.connection.execute('INSERT OR IGNORE INTO "transaction"(id,capture_file_id,payload) VALUES(?,?,?)',(tx.id,capture_id,tx.model_dump_json())); self.connection.commit()
     def statuses(self)->list[dict]: return [dict(x) for x in self.connection.execute("SELECT status,COUNT(*) count FROM capture_file GROUP BY status")]
     def recover_interrupted(self)->int:
         cur=self.connection.execute("UPDATE capture_file SET status='STABLE',error='recovered after interrupted run' WHERE status IN ('PROBING','PARSING','ANALYZING')"); self.connection.commit(); return cur.rowcount

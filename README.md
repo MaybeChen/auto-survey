@@ -195,6 +195,7 @@ Authorization、Cookie、API key、密码、token、手机号等配置化字段�
 * `dumpcap: Unable to load Npcap (wpcap.dll)`：表示 Wireshark/dumpcap 已安装，但 Npcap 用户态 DLL 或驱动缺失、损坏、版本不匹配，或者前一次升级没有完成；“已安装的应用”里出现 Npcap 不代表它当前可用。先重启 Windows 再测试。仍失败时，从“已安装的应用”卸载 Npcap（以及遗留 WinPcap），重启，以管理员身份安装与系统架构匹配的最新版 Npcap，再次重启。最后确认 `Get-Service npcap` 有结果、`Test-Path "$env:SystemRoot\System32\Npcap\wpcap.dll"` 返回 `True`，且 `dumpcap -D` 能列出接口。不要从第三方网站单独下载 `wpcap.dll`，也不要把 DLL 手工复制到 Wireshark 目录。
 * dumpcap permission denied：配置 wireshark 组/capabilities；Agent 不应以 root 运行。
 * `BLOCKED_TLS`：V1 不猜测 TLS 明文，请提供明文 HTTP 测试流量。
+* `sqlite3.OperationalError: near "transaction": syntax error`：这是旧版本 schema 未引用 SQLite 保留字 `transaction` 导致的初始化错误。更新代码并重新执行 `pip install --force-reinstall --no-deps .` 后重试分析即可；初始化中断后留下的 `agent.db` 可以继续使用，因为建表操作是幂等的。
 * `FAILED`：运行 `status` 并查看一致格式的服务日志；数据库保留 error 与状态。
 * AI 失败：确认 provider 兼容 chat-completions JSON 输出、模型名、base URL 和环境变量。
 
