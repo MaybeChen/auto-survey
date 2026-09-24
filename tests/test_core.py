@@ -5,6 +5,7 @@ import pytest
 from pydantic import ValidationError
 from src.ai.analyzer import deterministic_analysis
 from src.capture.dumpcap import DumpcapBackend
+from src.capture.scanner import CaptureScanner
 from src.config import AppConfig
 from src.database import Database
 from src.endpoint.cluster import group_transactions
@@ -38,6 +39,17 @@ def test_platform_factory_and_windows_linux_discovery():
     with patch("src.platform.windows.subprocess.run", return_value=failed):
         with pytest.raises(NpcapUnavailableError, match="Npcap could not be loaded"):
             _interfaces(Path("dumpcap.exe"))
+
+def test_database_is_optional_and_scanner_emits_once(tmp_path):
+    config = AppConfig()
+    assert config.database.enabled is False
+    capture = tmp_path / "capture.pcapng"
+    capture.write_bytes(b"pcap")
+    scanner = CaptureScanner(tmp_path, stable_seconds=0)
+    assert scanner.scan() == []
+    assert scanner.scan() == [capture]
+    assert scanner.scan() == []
+
 
 def test_command_builders(tmp_path):
     args=build_http1_args(tmp_path/"a.pcapng"); assert args[:3]==["-2","-r",str(tmp_path/"a.pcapng")]; assert "http.request.method" in args

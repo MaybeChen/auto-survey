@@ -15,5 +15,5 @@ redaction:
   headers: [authorization, cookie, set-cookie, proxy-authorization, x-api-key]
   json_fields: [password, passwd, pwd, token, accessToken, access_token, refreshToken, refresh_token, secret, apiKey, api_key, mobile, phone, idCard, id_card]
 ai: {enabled: false, provider: "", model: "", base_url: "", api_key_env: AI_API_KEY}
-database: {url: ""}
+database: {enabled: false, url: ""}
 output: {generate_json: true, generate_openapi: true}

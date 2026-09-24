@@ -118,7 +118,7 @@ capture:
 watch 只处理已稳定的文件，默认需等待文件停止修改 20 秒并连续两次大小一致。可按 `Ctrl+C` 停止，并检查：
 
 ```text
-D:/api-survey-ai-data/state/agent.db
+D:/api-survey-ai-data/output/reports/analysis-summary.json
 D:/api-survey-ai-data/output/api-catalog.json
 D:/api-survey-ai-data/output/interfaces/
 D:/api-survey-ai-data/output/openapi/
@@ -166,7 +166,7 @@ Unregister-ScheduledTask -TaskName 'API Survey Agent' -Confirm:$false
 
 ## 配置与运行
 
-所有路径通过 `storage.root` 和 `pathlib` 派生。Windows/Linux 示例分别位于 `config/`。API Key 只从 `ai.api_key_env` 指定的环境变量读取；不写入 YAML 或日志。AI 默认关闭，因此无模型也能生成基础事实层。
+所有路径通过 `storage.root` 和 `pathlib` 派生。Windows/Linux 示例分别位于 `config/`。API Key 只从 `ai.api_key_env` 指定的环境变量读取；不写入 YAML 或日志。AI 默认关闭，因此无模型也能生成基础事实层。 数据库也默认关闭，不使用数据库时保持 `database: {enabled: false, url: ""}` 即可；此模式仍会完整生成接口 JSON、Catalog、OpenAPI 和分析报告。
 
 ```bash
 api-survey --config config.yaml analyze demo.pcapng
@@ -179,11 +179,11 @@ api-survey --config config.yaml list-interfaces
 python -m src.agent --config config.yaml --once --input tests/fixtures/demo.pcapng
 ```
 
-远程抓包只需将 `.pcap`/`.pcapng` 放入 `capture/incoming`。watch 等待 mtime 超过阈值且两次大小一致。SQLite SHA256 唯一键避免重复，`analyze --force` 可重跑；中断状态可恢复。
+远程抓包只需将 `.pcap`/`.pcapng` 放入 `capture/incoming`。watch 等待 mtime 超过阈值且两次大小一致。默认不启用数据库，分析结果直接写入 JSON/YAML 文件；需要跨进程 SHA256 去重和状态恢复时，才显式设置 `database.enabled: true`。数据库关闭时 `--force` 无需使用。
 
 ## 数据、输出与安全
 
-目录自动创建为 `capture/incoming`、`work/{raw,transactions,redacted}`、`state/agent.db` 与 `output/{interfaces,openapi,reports,samples}`。核心产物 `output/interfaces/*.json` 包含 host/method/path、请求与响应 schema/example、样本统计、真实 observed path/status、置信度和未知项。`api-catalog.json` 建立资产索引；`openapi/openapi.{json,yaml}` **只由标准接口 JSON** 二次生成；`reports/analysis-summary.json` 记录摘要。
+目录自动创建为 `capture/incoming`、`work/{raw,transactions,redacted}` 与 `output/{interfaces,openapi,reports,samples}`。SQLite 默认关闭；仅当 `database.enabled: true` 时才创建 `state/agent.db`。核心产物 `output/interfaces/*.json` 包含 host/method/path、请求与响应 schema/example、样本统计、真实 observed path/status、置信度和未知项。`api-catalog.json` 建立资产索引；`openapi/openapi.{json,yaml}` **只由标准接口 JSON** 二次生成；`reports/analysis-summary.json` 记录摘要。
 
 Authorization、Cookie、API key、密码、token、手机号等配置化字段在嵌套对象/数组中递归替换为 `***`。外部 AI client 只接受内存中的脱敏 Transaction，不接收 pcap/raw 路径且没有 shell 能力。原始 pcap 永不自动删除。Validator 拒绝未观测状态、字段、路径和示例；低置信度或样本不足会进入 `PENDING_MORE_SAMPLES`。
 
@@ -195,7 +195,6 @@ Authorization、Cookie、API key、密码、token、手机号等配置化字段�
 * `dumpcap: Unable to load Npcap (wpcap.dll)`：表示 Wireshark/dumpcap 已安装，但 Npcap 用户态 DLL 或驱动缺失、损坏、版本不匹配，或者前一次升级没有完成；“已安装的应用”里出现 Npcap 不代表它当前可用。先重启 Windows 再测试。仍失败时，从“已安装的应用”卸载 Npcap（以及遗留 WinPcap），重启，以管理员身份安装与系统架构匹配的最新版 Npcap，再次重启。最后确认 `Get-Service npcap` 有结果、`Test-Path "$env:SystemRoot\System32\Npcap\wpcap.dll"` 返回 `True`，且 `dumpcap -D` 能列出接口。不要从第三方网站单独下载 `wpcap.dll`，也不要把 DLL 手工复制到 Wireshark 目录。
 * dumpcap permission denied：配置 wireshark 组/capabilities；Agent 不应以 root 运行。
 * `BLOCKED_TLS`：V1 不猜测 TLS 明文，请提供明文 HTTP 测试流量。
-* `sqlite3.OperationalError: near "transaction": syntax error`：这是旧版本 schema 未引用 SQLite 保留字 `transaction` 导致的初始化错误。更新代码并重新执行 `pip install --force-reinstall --no-deps .` 后重试分析即可；初始化中断后留下的 `agent.db` 可以继续使用，因为建表操作是幂等的。
 * `FAILED`：运行 `status` 并查看一致格式的服务日志；数据库保留 error 与状态。
 * AI 失败：确认 provider 兼容 chat-completions JSON 输出、模型名、base URL 和环境变量。
 

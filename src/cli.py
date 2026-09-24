@@ -16,7 +16,13 @@ def main(argv:list[str]|None=None)->int:
     if args.command=="analyze": analyze_file(args.pcap,config,args.force)
     elif args.command=="watch": watch(config)
     elif args.command=="status":
-        db=Database(Path(config.database.url) if config.database.url else paths["state"]/"agent.db"); print(json.dumps(db.statuses(),indent=2))
+        if config.database.enabled:
+            db=Database(Path(config.database.url) if config.database.url else paths["state"]/"agent.db")
+            print(json.dumps(db.statuses(),indent=2))
+        else:
+            report=paths["reports"]/"analysis-summary.json"
+            payload={"databaseEnabled":False,"lastAnalysis":json.loads(report.read_text(encoding="utf-8")) if report.exists() else None}
+            print(json.dumps(payload,indent=2,ensure_ascii=False))
     elif args.command=="list-interfaces": print(json.dumps(get_platform_adapter().list_interfaces(),indent=2))
     elif args.command=="generate-openapi": generate_openapi(load_interfaces(paths["interfaces"]),paths["openapi"])
     else:

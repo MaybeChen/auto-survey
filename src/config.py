@@ -15,7 +15,7 @@ class ToolConfig(BaseModel): path: Path | None=None
 class AnalysisConfig(BaseModel): min_samples: int=3; max_samples_per_endpoint: int=20; publish_confidence: float=.85
 class RedactionConfig(BaseModel): headers: list[str]=Field(default_factory=lambda:list(HEADERS)); json_fields: list[str]=Field(default_factory=lambda:list(FIELDS)); replacement: str="***"
 class AIConfig(BaseModel): enabled: bool=False; provider: str=""; model: str=""; base_url: str=""; api_key_env: str="AI_API_KEY"; retries: int=2
-class DatabaseConfig(BaseModel): url: str=""
+class DatabaseConfig(BaseModel): enabled: bool=False; url: str=""
 class OutputConfig(BaseModel): generate_json: bool=True; generate_openapi: bool=True
 class AppConfig(BaseModel):
     storage: StorageConfig=Field(default_factory=StorageConfig); capture: CaptureConfig=Field(default_factory=CaptureConfig)
