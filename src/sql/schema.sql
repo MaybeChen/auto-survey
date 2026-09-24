@@ -1,0 +1,11 @@
+PRAGMA foreign_keys=ON;
+CREATE TABLE IF NOT EXISTS capture_file(id INTEGER PRIMARY KEY,path TEXT NOT NULL,sha256 TEXT NOT NULL UNIQUE,status TEXT NOT NULL,error TEXT,protocol_stats TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS transaction(id TEXT PRIMARY KEY,capture_file_id INTEGER NOT NULL,payload TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(capture_file_id) REFERENCES capture_file(id));
+CREATE TABLE IF NOT EXISTS endpoint(id INTEGER PRIMARY KEY,host TEXT NOT NULL,method TEXT NOT NULL,normalized_path TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'DISCOVERED',sample_count INTEGER NOT NULL DEFAULT 0,confidence REAL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(host,method,normalized_path));
+CREATE TABLE IF NOT EXISTS endpoint_sample(id INTEGER PRIMARY KEY,endpoint_id INTEGER NOT NULL,transaction_id TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(endpoint_id) REFERENCES endpoint(id),FOREIGN KEY(transaction_id) REFERENCES transaction(id));
+CREATE TABLE IF NOT EXISTS field_observation(id INTEGER PRIMARY KEY,endpoint_id INTEGER NOT NULL,location TEXT NOT NULL,field_path TEXT NOT NULL,observation TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(endpoint_id) REFERENCES endpoint(id),UNIQUE(endpoint_id,location,field_path));
+CREATE TABLE IF NOT EXISTS ai_analysis(id INTEGER PRIMARY KEY,endpoint_id INTEGER NOT NULL,status TEXT NOT NULL,result TEXT,error TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(endpoint_id) REFERENCES endpoint(id));
+CREATE TABLE IF NOT EXISTS analysis_run(id INTEGER PRIMARY KEY,capture_file_id INTEGER,status TEXT NOT NULL,error TEXT,started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,finished_at TEXT,FOREIGN KEY(capture_file_id) REFERENCES capture_file(id));
+CREATE INDEX IF NOT EXISTS idx_capture_status ON capture_file(status);
+CREATE INDEX IF NOT EXISTS idx_endpoint_status ON endpoint(status);
+CREATE INDEX IF NOT EXISTS idx_sample_endpoint ON endpoint_sample(endpoint_id);

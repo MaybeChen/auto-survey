@@ -1,0 +1,19 @@
+storage:
+  root: ./data
+capture:
+  backend: dumpcap
+  interface: ""
+  filter: ""
+  stable_seconds: 20
+  duration_seconds: 300
+  filesize_kb: 51200
+  files: 288
+tshark: {path: null}
+dumpcap: {path: null}
+analysis: {min_samples: 3, max_samples_per_endpoint: 20, publish_confidence: 0.85}
+redaction:
+  headers: [authorization, cookie, set-cookie, proxy-authorization, x-api-key]
+  json_fields: [password, passwd, pwd, token, accessToken, access_token, refreshToken, refresh_token, secret, apiKey, api_key, mobile, phone, idCard, id_card]
+ai: {enabled: false, provider: "", model: "", base_url: "", api_key_env: AI_API_KEY}
+database: {url: ""}
+output: {generate_json: true, generate_openapi: true}
