@@ -231,6 +231,31 @@ ai:
 .\.venv\Scripts\api-survey.exe --config .\config.yaml analyze "D:\path\traffic.pcapng" --force
 ```
 
+在分析真实抓包前，可以使用不包含真实流量的合成请求检查模型连通性、鉴权以及结构化
+JSON 输出。成功时命令退出码为 `0`，失败时为 `1`；输出不会包含 API Key：
+
+```powershell
+.\.venv\Scripts\api-survey.exe --config .\config.yaml check-ai
+$LASTEXITCODE
+```
+
+成功结果示例：
+
+```json
+{
+  "healthy": true,
+  "model": "本地模型名",
+  "authenticated": false,
+  "structuredOutputValid": true,
+  "normalizedPath": "/__api_survey_health__",
+  "confidence": 1.0
+}
+```
+
+如果显示 `FAILED_AI_PARSE`，通常表示服务不可达、接口并非兼容的
+`/chat/completions`、模型不支持 `response_format: json_object`，或返回内容不符合结构化
+结果模型。鉴权模式下提示环境变量未设置时，应重新打开 PowerShell 或重启计划任务。
+
 AI 只接收完成递归脱敏后的 Transaction 样本。模型响应还会经过 Pydantic 结构校验和
 Evidence Validator；模型无法访问 pcap、文件系统或 Shell。若 AI 服务不可达、密钥缺失、
 返回非 JSON 或 JSON 不符合结果模型，本次分析会失败并记录状态，而不会静默发布未经验证

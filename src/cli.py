@@ -2,6 +2,7 @@ from __future__ import annotations
 import argparse,json
 from pathlib import Path
 from src.agent import analyze_file,watch
+from src.ai.health import check_ai
 from src.config import load_config
 from src.database import Database
 from src.output.openapi import generate_openapi,load_interfaces
@@ -13,7 +14,7 @@ def main(argv:list[str]|None=None)->int:
     analyze=sub.add_parser("analyze"); analyze.add_argument("pcap",type=Path); analyze.add_argument("--force",action="store_true")
     sub.add_parser("watch"); sub.add_parser("status"); sub.add_parser("list-endpoints")
     show=sub.add_parser("show-endpoint"); show.add_argument("method"); show.add_argument("path")
-    sub.add_parser("generate-openapi"); sub.add_parser("list-interfaces"); sub.add_parser("doctor")
+    sub.add_parser("generate-openapi"); sub.add_parser("list-interfaces"); sub.add_parser("doctor"); sub.add_parser("check-ai")
     args=parser.parse_args(argv); config=load_config(args.config); paths=config.create_directories()
     if args.command=="analyze": analyze_file(args.pcap,config,args.force)
     elif args.command=="watch": watch(config)
@@ -30,6 +31,9 @@ def main(argv:list[str]|None=None)->int:
         print(json.dumps(interfaces,indent=2))
     elif args.command=="doctor":
         result=run_checks(config); print(json.dumps(result,indent=2,ensure_ascii=False))
+        return 0 if result["healthy"] else 1
+    elif args.command=="check-ai":
+        result=check_ai(config.ai); print(json.dumps(result,indent=2,ensure_ascii=False))
         return 0 if result["healthy"] else 1
     elif args.command=="generate-openapi": generate_openapi(load_interfaces(paths["interfaces"]),paths["openapi"])
     else:
