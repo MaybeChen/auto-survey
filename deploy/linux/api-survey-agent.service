@@ -1,0 +1,15 @@
+[Unit]
+Description=API Survey analysis agent
+After=network.target
+[Service]
+Type=simple
+User=apisurvey
+Group=apisurvey
+WorkingDirectory=/opt/api-survey-ai
+ExecStart=/opt/api-survey-ai/.venv/bin/api-survey --config /etc/api-survey-ai/config.yaml watch
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+[Install]
+WantedBy=multi-user.target
