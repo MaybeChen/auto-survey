@@ -7,9 +7,12 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
 }
 
 python -m venv .venv
-& .\.venv\Scripts\python.exe -m pip install .
+& .\.venv\Scripts\python.exe -m pip install --upgrade --force-reinstall .
 & .\.venv\Scripts\python.exe -c "import src; print('Verified Python package:', src.__file__)"
-& .\.venv\Scripts\api-survey.exe --help | Out-Null
+$CliHelp = & .\.venv\Scripts\api-survey.exe --help
+if ($CliHelp -notmatch "check-ai") {
+  throw "Installed api-survey CLI is stale: check-ai command was not found."
+}
 New-Item -ItemType Directory -Force -Path logs | Out-Null
 if (-not (Test-Path config.yaml)) {
   Copy-Item config\config.windows.example.yaml config.yaml

@@ -90,6 +90,19 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 不要只复制 `api-survey.exe`；控制台入口和 `src` Python 包必须由同一次 `pip install` 安装。
 
+如果 `check-ai` 提示 `invalid choice`，说明 `.venv` 里仍是增加该命令之前安装的旧版本，
+而不是模型配置错误。拉取最新代码后，在项目根目录强制重装，并确认帮助中出现命令：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install --upgrade --force-reinstall .
+.\.venv\Scripts\api-survey.exe --help | Select-String "check-ai"
+.\.venv\Scripts\api-survey.exe --config .\config.yaml check-ai
+```
+
+也可以重新运行 `deploy/windows/install.ps1`；脚本现在会强制更新当前项目，并在安装结果
+缺少 `check-ai` 时直接报错。重装 Python 包不会覆盖现有的 `config.yaml`、抓包文件、
+SQLite 数据库或 `storage.root` 下的输出。
+
 #### 3. 配置数据目录和抓包接口
 
 编辑项目根目录的 `config.yaml`，至少修改以下项目：
