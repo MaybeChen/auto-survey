@@ -54,7 +54,7 @@ def _capture_key(path: Path) -> str:
 
 
 def analyze_file(pcap: Path, config: AppConfig, force: bool = False) -> list[dict[str, Any]]:
-    """Analyze one capture; SQLite persistence is optional and disabled by default."""
+    """Analyze one capture; SQLite persistence is enabled by default and can be disabled."""
     if not pcap.is_file() or pcap.suffix.lower() not in {".pcap", ".pcapng"}:
         raise FileNotFoundError(f"pcap not found or unsupported: {pcap}")
 

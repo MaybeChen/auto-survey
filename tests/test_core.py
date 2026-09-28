@@ -40,9 +40,9 @@ def test_platform_factory_and_windows_linux_discovery():
         with pytest.raises(NpcapUnavailableError, match="Npcap could not be loaded"):
             _interfaces(Path("dumpcap.exe"))
 
-def test_database_is_optional_and_scanner_emits_once(tmp_path):
+def test_database_defaults_enabled_and_scanner_emits_once(tmp_path):
     config = AppConfig()
-    assert config.database.enabled is False
+    assert config.database.enabled is True
     capture = tmp_path / "capture.pcapng"
     capture.write_bytes(b"pcap")
     scanner = CaptureScanner(tmp_path, stable_seconds=0)
