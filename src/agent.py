@@ -15,6 +15,7 @@ from src.capture.scanner import CaptureScanner
 from src.config import AppConfig, load_config
 from src.database import Database
 from src.endpoint.cluster import EndpointGroup, group_transactions
+from src.endpoint.ignore import should_ignore_transaction
 from src.endpoint.samples import observe_fields
 from src.models import CaptureStatus
 from src.output.atomic import atomic_write_text
@@ -97,7 +98,18 @@ def analyze_file(pcap: Path, config: AppConfig, force: bool = False) -> list[dic
 
         set_status(CaptureStatus.PARSING)
         packets = extract_http1(runner, pcap)
-        transactions = build_transactions(packets)
+        captured_transactions = build_transactions(packets)
+        transactions = [
+            transaction
+            for transaction in captured_transactions
+            if not should_ignore_transaction(transaction, config.analysis)
+        ]
+        ignored_transaction_count = len(captured_transactions) - len(transactions)
+        if ignored_transaction_count:
+            LOG.info(
+                "ignored %s configured static-resource transactions",
+                ignored_transaction_count,
+            )
         # Frame/stream IDs restart in every capture; namespace transaction IDs by capture.
         for transaction in transactions:
             transaction.id = f"{capture_key}:{transaction.id}"
@@ -127,6 +139,10 @@ def analyze_file(pcap: Path, config: AppConfig, force: bool = False) -> list[dic
                 (endpoint_id, group)
                 for endpoint_id, group in database.load_endpoint_groups(
                     config.analysis.max_samples_per_endpoint
+                )
+                if any(
+                    not should_ignore_transaction(sample, config.analysis)
+                    for sample in group.samples
                 )
             ]
         else:
@@ -200,6 +216,8 @@ def analyze_file(pcap: Path, config: AppConfig, force: bool = False) -> list[dic
             "capture": pcap.name,
             "captureSha256": capture_key,
             "protocols": stats,
+            "capturedTransactionCount": len(captured_transactions),
+            "ignoredTransactionCount": ignored_transaction_count,
             "transactionCount": len(transactions),
             "endpointCount": len(documents),
             "databaseEnabled": database is not None,

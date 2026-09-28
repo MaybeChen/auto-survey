@@ -10,7 +10,12 @@ capture:
   files: 288
 tshark: {path: null}
 dumpcap: {path: null}
-analysis: {min_samples: 3, max_samples_per_endpoint: 20, publish_confidence: 0.85}
+analysis:
+  min_samples: 3
+  max_samples_per_endpoint: 20
+  publish_confidence: 0.85
+  ignore_paths: ["/favicon.ico", "/.well-known/appspecific/com.chrome.devtools.json"]
+  ignore_extensions: [".css", ".js", ".map", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp", ".woff", ".woff2", ".ttf", ".eot"]
 redaction:
   headers: [authorization, cookie, set-cookie, proxy-authorization, x-api-key]
   json_fields: [password, passwd, pwd, token, accessToken, access_token, refreshToken, refresh_token, secret, apiKey, api_key, mobile, phone, idCard, id_card]

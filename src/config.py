@@ -7,12 +7,19 @@ from pydantic import BaseModel, Field
 
 HEADERS=["authorization","cookie","set-cookie","proxy-authorization","x-api-key"]
 FIELDS=["password","passwd","pwd","token","accessToken","access_token","refreshToken","refresh_token","secret","apiKey","api_key","mobile","phone","idCard","id_card"]
+IGNORED_PATHS=["/favicon.ico", "/.well-known/appspecific/com.chrome.devtools.json"]
+IGNORED_EXTENSIONS=[".css", ".js", ".map", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp", ".woff", ".woff2", ".ttf", ".eot"]
 class StorageConfig(BaseModel): root: Path=Path("./data")
 class CaptureConfig(BaseModel):
     backend: str="dumpcap"; interface: str=""; filter: str=""; stable_seconds: int=20
     duration_seconds: int=300; filesize_kb: int=51200; files: int=288
 class ToolConfig(BaseModel): path: Path | None=None
-class AnalysisConfig(BaseModel): min_samples: int=3; max_samples_per_endpoint: int=20; publish_confidence: float=.85
+class AnalysisConfig(BaseModel):
+    min_samples: int=3
+    max_samples_per_endpoint: int=20
+    publish_confidence: float=.85
+    ignore_paths: list[str]=Field(default_factory=lambda:list(IGNORED_PATHS))
+    ignore_extensions: list[str]=Field(default_factory=lambda:list(IGNORED_EXTENSIONS))
 class RedactionConfig(BaseModel): headers: list[str]=Field(default_factory=lambda:list(HEADERS)); json_fields: list[str]=Field(default_factory=lambda:list(FIELDS)); replacement: str="***"
 class AIConfig(BaseModel): enabled: bool=False; provider: str=""; model: str=""; base_url: str=""; api_key_env: str="AI_API_KEY"; retries: int=2
 class DatabaseConfig(BaseModel): enabled: bool=True; url: str=""

@@ -6,9 +6,10 @@ from pydantic import ValidationError
 from src.ai.analyzer import deterministic_analysis
 from src.capture.dumpcap import DumpcapBackend
 from src.capture.scanner import CaptureScanner
-from src.config import AppConfig
+from src.config import AnalysisConfig, AppConfig
 from src.database import Database
 from src.endpoint.cluster import group_transactions
+from src.endpoint.ignore import should_ignore_transaction
 from src.endpoint.normalizer import normalize_path,path_matches
 from src.endpoint.samples import observe_fields
 from src.models import EndpointAnalysisResult,HTTPRequest,HTTPResponse,Transaction,CaptureStatus
@@ -73,6 +74,22 @@ def test_recursive_redaction_normalization_grouping_observation():
     assert path_matches("/users/{value}","/users/123")
     groups=group_transactions([sample_tx("/users/123"),sample_tx("/users/456")]); assert len(groups)==1; assert groups[0].observed_paths==["/users/123","/users/456"]
     obs=observe_fields([{"language":"en"},{"other":1}]); assert obs["language"]["observedPresence"]==.5; assert obs["language"]["observedTypes"]==["string"]
+
+
+def test_static_resource_filter_is_configurable_and_case_insensitive():
+    config = AnalysisConfig()
+    assert should_ignore_transaction(sample_tx("/favicon.ico"), config)
+    assert should_ignore_transaction(
+        sample_tx("/.well-known/appspecific/com.chrome.devtools.json"), config
+    )
+    assert should_ignore_transaction(sample_tx("/assets/app.min.JS"), config)
+    assert not should_ignore_transaction(sample_tx("/api/users.json"), config)
+    assert not should_ignore_transaction(sample_tx("/users/1001"), config)
+
+    custom = AnalysisConfig(ignore_paths=["/static/*"], ignore_extensions=[])
+    assert should_ignore_transaction(sample_tx("/STATIC/logo.bin"), custom)
+    disabled = AnalysisConfig(ignore_paths=[], ignore_extensions=[])
+    assert not should_ignore_transaction(sample_tx("/favicon.ico"), disabled)
 
 def test_interface_records_request_body_presence() -> None:
     without_body = Transaction(

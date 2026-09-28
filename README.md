@@ -193,6 +193,29 @@ python -m src.agent --config config.yaml --once --input tests/fixtures/demo.pcap
 
 远程抓包只需将 `.pcap`/`.pcapng` 放入 `capture/incoming`。watch 等待 mtime 超过阈值且两次大小一致。默认启用 SQLite，用于跨进程 SHA256 去重、处理状态和中断恢复；`database.url` 留空时数据库位于 `storage.root/state/agent.db`。如显式关闭数据库，分析结果仍直接写入 JSON/YAML 文件，但 `--force` 无需使用。 数据库启用时，脱敏 Transaction 会按 Endpoint 跨多个 pcap 累积，Transaction ID 使用 capture SHA256 命名空间避免不同文件的 frame/stream 冲突；Agent 每次从全部持久化 Endpoint 样本重建 Interface、Catalog 和 OpenAPI。异常中断的分析运行会在下次启动时标记失败并恢复 Capture 状态。`doctor` 会检查工具发现、抓包权限、存储写入和数据库初始化。
 
+### 忽略静态资源
+
+分析阶段默认忽略 `/favicon.ico`、Chrome DevTools 探测路径，以及常见的 CSS、
+JavaScript、图片、Source Map 和字体扩展名。规则在 HTTP 事务建立后、写入脱敏样本和
+Endpoint 聚合前生效；原始 pcap 不会被修改或删除。
+数据库中由旧版本保存的静态 Endpoint 也会在重建输出时被排除，但历史数据库记录仍保留。
+
+```yaml
+analysis:
+  min_samples: 3
+  max_samples_per_endpoint: 20
+  publish_confidence: 0.85
+  ignore_paths:
+    - "/favicon.ico"
+    - "/.well-known/appspecific/com.chrome.devtools.json"
+    - "/static/*" # 支持 glob；按需添加
+  ignore_extensions: [".css", ".js", ".map", ".png", ".jpg", ".svg", ".ico", ".woff2"]
+```
+
+匹配不区分大小写。`ignore_extensions` 只按 URL 路径的最后扩展名匹配，默认不忽略
+`.json`，避免误删真实 JSON API。如果业务接口本身以 `.js` 等后缀结尾，请从列表中
+删除对应扩展名。设为 `ignore_paths: []` 和 `ignore_extensions: []` 可完全关闭过滤。
+
 ## 数据、输出与安全
 
 目录自动创建为 `capture/incoming`、`work/{raw,transactions,redacted}` 与 `output/{interfaces,openapi,reports,samples}`。SQLite 默认启用并创建 `state/agent.db`；只有显式设置 `database.enabled: false` 时才不使用数据库。 所有 Interface、Catalog、OpenAPI 和报告先写同目录临时文件并通过原子替换发布，避免服务崩溃或并发读取时得到半写文件。核心产物 `output/interfaces/*.json` 包含 host/method/path、请求与响应 schema/example、样本统计、真实 observed path/status、置信度和未知项。`api-catalog.json` 建立资产索引；`openapi/openapi.{json,yaml}` **只由标准接口 JSON** 二次生成；`reports/analysis-summary.json` 记录摘要。 标准接口 JSON 的 `request.bodyObserved` 明确记录是否真实观测到请求体；OpenAPI 生成器依据该证据决定是否输出 `requestBody`，因此空对象、空数组、`0`、`false` 和空字符串不会被误删。旧接口 JSON 没有此标记时，仅将非 `null` 的 `request.example` 视为请求体证据；旧数据中的 JSON `null` 无法与未观测请求体可靠区分。
