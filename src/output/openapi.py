@@ -8,6 +8,8 @@ from typing import Any
 
 import yaml
 
+from src.output.atomic import atomic_write_text
+
 _PATH_PARAMETER = re.compile(r"\{([^{}]+)\}")
 
 
@@ -95,11 +97,13 @@ def generate_openapi(
         "paths": paths,
     }
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "openapi.json").write_text(
-        json.dumps(spec, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    atomic_write_text(
+        output_dir / "openapi.json",
+        json.dumps(spec, indent=2, ensure_ascii=False) + "\n",
     )
-    (output_dir / "openapi.yaml").write_text(
-        yaml.safe_dump(spec, sort_keys=False, allow_unicode=True), encoding="utf-8"
+    atomic_write_text(
+        output_dir / "openapi.yaml",
+        yaml.safe_dump(spec, sort_keys=False, allow_unicode=True),
     )
     return spec
 

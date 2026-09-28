@@ -14,8 +14,10 @@ from src.ai.client import HTTPAIClient
 from src.capture.scanner import CaptureScanner
 from src.config import AppConfig, load_config
 from src.database import Database
-from src.endpoint.cluster import group_transactions
+from src.endpoint.cluster import EndpointGroup, group_transactions
+from src.endpoint.samples import observe_fields
 from src.models import CaptureStatus
+from src.output.atomic import atomic_write_text
 from src.output.catalog import write_catalog
 from src.output.interface_json import build_interface, write_interface
 from src.output.openapi import generate_openapi
@@ -45,16 +47,16 @@ def _optional_database(config: AppConfig, state_dir: Path) -> Database | None:
 
 
 def _capture_key(path: Path) -> str:
-    """Return a stable short identifier without requiring persistent state."""
+    """Return a stable SHA256 identifier without requiring persistent state."""
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
-    return digest.hexdigest()[:16]
+    return digest.hexdigest()
 
 
 def analyze_file(pcap: Path, config: AppConfig, force: bool = False) -> list[dict[str, Any]]:
-    """Analyze one capture; SQLite persistence is enabled by default and can be disabled."""
+    """Analyze a capture and merge its redacted evidence into persistent endpoints."""
     if not pcap.is_file() or pcap.suffix.lower() not in {".pcap", ".pcapng"}:
         raise FileNotFoundError(f"pcap not found or unsupported: {pcap}")
 
@@ -62,15 +64,22 @@ def analyze_file(pcap: Path, config: AppConfig, force: bool = False) -> list[dic
     database = _optional_database(config, paths["state"])
     capture_key = _capture_key(pcap)
     capture_id: int | None = None
+    run_id: int | None = None
     if database is not None:
+        database.recover_interrupted()
         capture_id, should_process = database.register_capture(pcap, force)
         if not should_process:
             LOG.info("capture already processed: %s", pcap)
             return []
+        run_id = database.start_run(capture_id)
     elif force:
         LOG.debug("--force has no effect while database persistence is disabled")
 
-    def set_status(status: CaptureStatus, error: str | None = None, stats: dict[str, int] | None = None) -> None:
+    def set_status(
+        status: CaptureStatus,
+        error: str | None = None,
+        stats: dict[str, int] | None = None,
+    ) -> None:
         if database is not None and capture_id is not None:
             database.set_capture_status(capture_id, status, error=error, stats=stats)
 
@@ -82,11 +91,16 @@ def analyze_file(pcap: Path, config: AppConfig, force: bool = False) -> list[dic
         if not stats["http"]:
             status = CaptureStatus.BLOCKED_TLS if stats["tls"] else CaptureStatus.DONE
             set_status(status, stats=stats)
+            if database is not None and run_id is not None:
+                database.finish_run(run_id, status.value)
             return []
 
         set_status(CaptureStatus.PARSING)
         packets = extract_http1(runner, pcap)
         transactions = build_transactions(packets)
+        # Frame/stream IDs restart in every capture; namespace transaction IDs by capture.
+        for transaction in transactions:
+            transaction.id = f"{capture_key}:{transaction.id}"
         redacted = [
             redact_transaction(
                 transaction,
@@ -96,15 +110,39 @@ def analyze_file(pcap: Path, config: AppConfig, force: bool = False) -> list[dic
             )
             for transaction in transactions
         ]
-        if database is not None and capture_id is not None:
-            for transaction in transactions:
-                database.save_transaction(capture_id, transaction)
-
-        redacted_file = paths["redacted"] / f"capture-{capture_key}.json"
-        redacted_file.write_text(
-            json.dumps([item.model_dump(mode="json") for item in redacted], indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
+        current_groups = group_transactions(
+            redacted, config.analysis.max_samples_per_endpoint
         )
+        current_keys = {group.key for group in current_groups}
+
+        endpoint_groups: list[tuple[int | None, EndpointGroup]]
+        if database is not None and capture_id is not None:
+            for transaction in redacted:
+                database.save_transaction(capture_id, transaction)
+            for group in current_groups:
+                endpoint_id = database.upsert_endpoint(group)
+                for transaction in group.samples:
+                    database.add_endpoint_sample(endpoint_id, transaction.id)
+            endpoint_groups = [
+                (endpoint_id, group)
+                for endpoint_id, group in database.load_endpoint_groups(
+                    config.analysis.max_samples_per_endpoint
+                )
+            ]
+        else:
+            endpoint_groups = [(None, group) for group in current_groups]
+
+        redacted_file = paths["redacted"] / f"capture-{capture_key[:16]}.json"
+        atomic_write_text(
+            redacted_file,
+            json.dumps(
+                [item.model_dump(mode="json") for item in redacted],
+                indent=2,
+                ensure_ascii=False,
+            )
+            + "\n",
+        )
+        set_status(CaptureStatus.PARSED, stats=stats)
         set_status(CaptureStatus.ANALYZING, stats=stats)
         client = (
             HTTPAIClient(
@@ -117,17 +155,47 @@ def analyze_file(pcap: Path, config: AppConfig, force: bool = False) -> list[dic
             else None
         )
         documents: list[tuple[Path, dict[str, Any]]] = []
-        for group in group_transactions(redacted, config.analysis.max_samples_per_endpoint):
-            result = analyze(group, client)
+        current_pending = False
+        for endpoint_id, group in endpoint_groups:
+            try:
+                result = analyze(group, client)
+            except Exception as exc:
+                if database is not None and endpoint_id is not None:
+                    database.save_ai_analysis(endpoint_id, None, str(exc))
+                raise
             validation = validate_analysis(group, result)
             document = build_interface(group, result, validation)
             output_file = write_interface(paths["interfaces"], document)
             documents.append((output_file, document))
+            pending = (
+                validation["confidence"] < config.analysis.publish_confidence
+                or len(group.samples) < config.analysis.min_samples
+            )
+            if group.key in current_keys:
+                current_pending = current_pending or pending
+            if database is not None and endpoint_id is not None:
+                database.update_endpoint(
+                    endpoint_id,
+                    CaptureStatus.PENDING_MORE_SAMPLES if pending else CaptureStatus.DONE,
+                    validation["confidence"],
+                )
+                database.save_observations(
+                    endpoint_id,
+                    "request.body",
+                    observe_fields([sample.request.body for sample in group.samples]),
+                )
+                database.save_ai_analysis(endpoint_id, result)
 
+        generated_interface_files = {path.resolve() for path, _ in documents}
+        for existing in paths["interfaces"].glob("*.json"):
+            if existing.resolve() not in generated_interface_files:
+                existing.unlink()
         output_root = paths["interfaces"].parent
         write_catalog(output_root, documents)
         if config.output.generate_openapi:
-            generate_openapi([document for _, document in documents], paths["openapi"])
+            generate_openapi(
+                [document for _, document in documents], paths["openapi"]
+            )
         summary = {
             "capture": pcap.name,
             "captureSha256": capture_key,
@@ -136,18 +204,21 @@ def analyze_file(pcap: Path, config: AppConfig, force: bool = False) -> list[dic
             "endpointCount": len(documents),
             "databaseEnabled": database is not None,
         }
-        (paths["reports"] / "analysis-summary.json").write_text(
-            json.dumps(summary, indent=2) + "\n", encoding="utf-8"
+        atomic_write_text(
+            paths["reports"] / "analysis-summary.json",
+            json.dumps(summary, indent=2) + "\n",
         )
-        pending = any(
-            document["confidence"] < config.analysis.publish_confidence
-            or document["statistics"]["sampleCount"] < config.analysis.min_samples
-            for _, document in documents
+        final_status = (
+            CaptureStatus.PENDING_MORE_SAMPLES if current_pending else CaptureStatus.DONE
         )
-        set_status(CaptureStatus.PENDING_MORE_SAMPLES if pending else CaptureStatus.DONE)
+        set_status(final_status)
+        if database is not None and run_id is not None:
+            database.finish_run(run_id, final_status.value)
         return [document for _, document in documents]
     except Exception as exc:
         set_status(CaptureStatus.FAILED, error=str(exc))
+        if database is not None and run_id is not None:
+            database.finish_run(run_id, "FAILED", str(exc))
         LOG.exception("analysis failed for %s", pcap)
         raise
 

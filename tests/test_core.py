@@ -125,5 +125,47 @@ def test_sqlite_dedup_and_recovery(tmp_path):
     db.save_transaction(ident, tx)
     saved = db.connection.execute('SELECT COUNT(*) FROM "transaction"').fetchone()[0]
     assert saved == 1
+    run_id = db.start_run(ident)
     db.set_capture_status(ident,CaptureStatus.PARSING); assert db.recover_interrupted()==1
     status=db.connection.execute("SELECT status FROM capture_file WHERE id=?",(ident,)).fetchone()[0]; assert status=="STABLE"
+    run = db.connection.execute(
+        "SELECT status,error,finished_at FROM analysis_run WHERE id=?", (run_id,)
+    ).fetchone()
+    assert run["status"] == "FAILED"
+    assert run["error"] == "recovered after interrupted run"
+    assert run["finished_at"] is not None
+
+
+def test_database_aggregates_endpoint_samples_across_captures(tmp_path):
+    database = Database(tmp_path / "agent.db")
+    capture_one = tmp_path / "one.pcapng"
+    capture_two = tmp_path / "two.pcapng"
+    capture_one.write_bytes(b"one")
+    capture_two.write_bytes(b"two")
+    capture_one_id, _ = database.register_capture(capture_one)
+    capture_two_id, _ = database.register_capture(capture_two)
+    first = sample_tx("/users/1001")
+    second = sample_tx("/users/1002")
+    first.id = "capture-one:first"
+    second.id = "capture-two:second"
+    group = group_transactions([first, second])[0]
+    endpoint_id = database.upsert_endpoint(group)
+    database.save_transaction(capture_one_id, first)
+    database.save_transaction(capture_two_id, second)
+    database.add_endpoint_sample(endpoint_id, first.id)
+    database.add_endpoint_sample(endpoint_id, second.id)
+
+    persisted = database.load_endpoint_groups(max_samples=20)
+    assert len(persisted) == 1
+    assert persisted[0][0] == endpoint_id
+    assert [sample.request.path for sample in persisted[0][1].samples] == [
+        "/users/1001",
+        "/users/1002",
+    ]
+    sample_count = database.connection.execute(
+        "SELECT sample_count FROM endpoint WHERE id=?", (endpoint_id,)
+    ).fetchone()[0]
+    assert sample_count == 2
+    report = database.status_report()
+    assert report["captureFiles"] == [{"status": "DISCOVERED", "count": 2}]
+    assert report["endpoints"] == [{"status": "DISCOVERED", "count": 1}]
