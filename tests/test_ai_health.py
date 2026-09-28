@@ -1,6 +1,11 @@
+import httpx
+import pytest
+
+from src.ai.client import HTTPAIClient
 from src.ai.health import check_ai
 from src.config import AIConfig
 from src.models import EndpointAnalysisResult
+from src.models import EndpointAnalysisRequest
 
 
 def test_check_ai_rejects_disabled_or_incomplete_configuration():
@@ -61,3 +66,41 @@ def test_check_ai_returns_secret_free_failure(monkeypatch):
         "authenticated": True,
         "error": "FAILED_AI_PARSE",
     }
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected"),
+    [
+        (httpx.ConnectError("refused"), "CONNECTION_ERROR_ConnectError"),
+        (httpx.TimeoutException("slow"), "TIMEOUT"),
+    ],
+)
+def test_ai_client_reports_safe_transport_failure(monkeypatch, failure, expected):
+    monkeypatch.setattr(
+        "src.ai.client.httpx.post", lambda *args, **kwargs: (_ for _ in ()).throw(failure)
+    )
+    client = HTTPAIClient("http://127.0.0.1:8000/v1", "qwen", "", retries=0)
+    with pytest.raises(RuntimeError, match=expected):
+        client.analyze_endpoint(
+            EndpointAnalysisRequest(
+                host="test", method="GET", normalized_path="/test", samples=[]
+            )
+        )
+
+
+def test_ai_client_reports_http_status_without_response_body(monkeypatch):
+    request = httpx.Request("POST", "http://127.0.0.1:8000/v1/chat/completions")
+    response = httpx.Response(400, request=request, text="sensitive provider details")
+
+    def post(*args, **kwargs):
+        return response
+
+    monkeypatch.setattr("src.ai.client.httpx.post", post)
+    client = HTTPAIClient("http://127.0.0.1:8000/v1", "qwen", "", retries=0)
+    with pytest.raises(RuntimeError, match="HTTP_STATUS_400") as error:
+        client.analyze_endpoint(
+            EndpointAnalysisRequest(
+                host="test", method="GET", normalized_path="/test", samples=[]
+            )
+        )
+    assert "sensitive provider details" not in str(error.value)

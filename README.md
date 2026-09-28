@@ -265,9 +265,32 @@ $LASTEXITCODE
 }
 ```
 
-如果显示 `FAILED_AI_PARSE`，通常表示服务不可达、接口并非兼容的
-`/chat/completions`、模型不支持 `response_format: json_object`，或返回内容不符合结构化
-结果模型。鉴权模式下提示环境变量未设置时，应重新打开 PowerShell 或重启计划任务。
+如果显示 `FAILED_AI_PARSE`，错误后缀会进一步区分：`HTTP_STATUS_404` 通常是
+`base_url` 路径不对，`HTTP_STATUS_400` 通常是模型服务不接受请求参数（常见于不支持
+`response_format`），`CONNECTION_ERROR_*` 表示地址、端口或网络问题，`TIMEOUT` 表示
+60 秒内未响应，`INVALID_CHAT_COMPLETIONS_RESPONSE` 表示响应不是兼容结构，
+`INVALID_STRUCTURED_OUTPUT_*` 表示 `message.content` 不是符合结果模型的 JSON。鉴权模式下
+提示环境变量未设置时，应重新打开 PowerShell 或重启计划任务。
+
+可先绕过本项目，用 PowerShell 直接检查服务的模型列表和 Chat Completions 端点。以下
+示例适用于无需鉴权的本地服务；地址应与配置中的 `base_url` 一致：
+
+```powershell
+Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/v1/models"
+
+$body = @{
+  model = "qwen"
+  messages = @(@{ role = "user"; content = "只返回 JSON：{`"ok`":true}" })
+  response_format = @{ type = "json_object" }
+} | ConvertTo-Json -Depth 10
+
+Invoke-RestMethod -Method Post `
+  -Uri "http://127.0.0.1:8000/v1/chat/completions" `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+如果 `/models` 返回的实际模型 ID 不是 `qwen`，应把配置的 `ai.model` 改成返回的精确 ID。
 
 AI 只接收完成递归脱敏后的 Transaction 样本。模型响应还会经过 Pydantic 结构校验和
 Evidence Validator；模型无法访问 pcap、文件系统或 Shell。若 AI 服务不可达、密钥缺失、
