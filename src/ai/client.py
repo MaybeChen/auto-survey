@@ -18,11 +18,13 @@ class HTTPAIClient(AIClient):
         model: str,
         api_key_env: str = "AI_API_KEY",
         retries: int = 2,
+        trust_env_proxy: bool = False,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key_env = api_key_env
         self.retries = retries
+        self.trust_env_proxy = trust_env_proxy
 
     def analyze_endpoint(
         self, request: EndpointAnalysisRequest
@@ -58,6 +60,7 @@ class HTTPAIClient(AIClient):
                         "response_format": {"type": "json_object"},
                     },
                     timeout=60,
+                    trust_env=self.trust_env_proxy,
                 )
                 response.raise_for_status()
                 content = response.json()["choices"][0]["message"]["content"]

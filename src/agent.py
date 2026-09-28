@@ -166,6 +166,7 @@ def analyze_file(pcap: Path, config: AppConfig, force: bool = False) -> list[dic
                 config.ai.model,
                 config.ai.api_key_env,
                 config.ai.retries,
+                config.ai.trust_env_proxy,
             )
             if config.ai.enabled
             else None

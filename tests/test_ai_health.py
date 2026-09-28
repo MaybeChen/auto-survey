@@ -47,6 +47,29 @@ def test_check_ai_uses_synthetic_evidence_and_reports_structured_output(monkeypa
     assert captured["request"].samples == []
 
 
+def test_check_ai_passes_explicit_environment_proxy_policy(monkeypatch):
+    captured = {}
+
+    def analyze(client, request):
+        captured["trust_env_proxy"] = client.trust_env_proxy
+        return EndpointAnalysisResult(
+            normalized_path=request.normalized_path, confidence=1.0
+        )
+
+    monkeypatch.setattr("src.ai.health.HTTPAIClient.analyze_endpoint", analyze)
+    result = check_ai(
+        AIConfig(
+            enabled=True,
+            model="remote-model",
+            base_url="https://ai.example.test/v1",
+            api_key_env="",
+            trust_env_proxy=True,
+        )
+    )
+    assert result["healthy"] is True
+    assert captured["trust_env_proxy"] is True
+
+
 def test_check_ai_returns_secret_free_failure(monkeypatch):
     def fail(_client, _request):
         raise RuntimeError("FAILED_AI_PARSE")

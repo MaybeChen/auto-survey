@@ -206,6 +206,7 @@ ai:
   base_url: "https://你的服务地址/v1"
   api_key_env: "AI_API_KEY"
   retries: 2
+  trust_env_proxy: false
 ```
 
 `model` 必须是服务端接受的模型名或部署名。`retries` 是首次请求失败后的额外重试次数。
@@ -233,10 +234,14 @@ ai:
   base_url: "http://127.0.0.1:8000/v1"
   api_key_env: ""
   retries: 2
+  trust_env_proxy: false
 ```
 
 只有确认模型服务所在网络边界可信且服务本身确实不要求鉴权时才应使用此模式。如果填写
 了环境变量名称（例如 `AI_API_KEY`），对应变量缺失仍会立即报错，防止意外匿名请求公网服务。
+`trust_env_proxy: false` 是默认值，表示 AI 请求不读取 `HTTP_PROXY`、`HTTPS_PROXY` 和
+`ALL_PROXY`，适合 localhost 或内网自部署模型，可避免请求被系统代理错误转发。只有访问
+外部模型确实必须经过环境代理时才改为 `true`；也可以保持为 `false`，由网络层直接路由。
 
 配置完成后，用 `--force` 重新分析已经处理过的 pcap，才能重新调用 AI：
 
@@ -271,6 +276,9 @@ $LASTEXITCODE
 60 秒内未响应，`INVALID_CHAT_COMPLETIONS_RESPONSE` 表示响应不是兼容结构，
 `INVALID_STRUCTURED_OUTPUT_*` 表示 `message.content` 不是符合结果模型的 JSON。鉴权模式下
 提示环境变量未设置时，应重新打开 PowerShell 或重启计划任务。
+`CONNECTION_ERROR_ProxyError` 表示旧版本或显式启用代理后，请求被环境代理拦截；本地模型
+应设置 `trust_env_proxy: false` 并重新安装当前项目。临时排查也可以在当前 PowerShell 中
+设置 `$env:NO_PROXY = "127.0.0.1,localhost,模型服务器IP"`。
 
 可先绕过本项目，用 PowerShell 直接检查服务的模型列表和 Chat Completions 端点。以下
 示例适用于无需鉴权的本地服务；地址应与配置中的 `base_url` 一致：

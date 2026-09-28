@@ -73,6 +73,7 @@ ai:
     assert config.ai.base_url == "https://ai.example.test/v1"
     assert config.ai.api_key_env == "SURVEY_AI_KEY"
     assert config.ai.retries == 3
+    assert config.ai.trust_env_proxy is False
 
 
 def test_ai_client_supports_explicit_anonymous_self_hosted_service(monkeypatch):
@@ -115,6 +116,7 @@ def test_ai_client_supports_explicit_anonymous_self_hosted_service(monkeypatch):
     assert result.normalized_path == "/health"
     assert captured["url"] == "http://127.0.0.1:8000/v1/chat/completions"
     assert captured["headers"] == {}
+    assert captured["trust_env"] is False
 
 
 def test_ai_client_requires_configured_environment_variable(monkeypatch):
