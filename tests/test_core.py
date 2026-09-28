@@ -185,3 +185,29 @@ def test_configured_dumpcap_interface_parser(monkeypatch):
         {"index": "1", "name": "Ethernet"},
         {"index": "2", "name": "Wi-Fi"},
     ]
+
+
+def test_dumpcap_interface_output_is_decoded_without_windows_locale(monkeypatch):
+    from subprocess import CompletedProcess
+    from src.platform.interfaces import list_dumpcap_interfaces
+
+    output = "1. 以太网\n2. Wi-Fi €\n".encode("utf-8") + b"3. device-\xac\n"
+    monkeypatch.setattr(
+        "src.platform.interfaces.subprocess.run",
+        lambda *args, **kwargs: CompletedProcess(args[0], 0, output, b""),
+    )
+    interfaces = list_dumpcap_interfaces(Path("D:/Wireshark/dumpcap.exe"))
+    assert interfaces[0] == {"index": "1", "name": "以太网"}
+    assert interfaces[1] == {"index": "2", "name": "Wi-Fi €"}
+    assert interfaces[2]["name"] == "device-�"
+
+
+def test_dumpcap_none_stdout_does_not_crash(monkeypatch):
+    from subprocess import CompletedProcess
+    from src.platform.interfaces import list_dumpcap_interfaces
+
+    monkeypatch.setattr(
+        "src.platform.interfaces.subprocess.run",
+        lambda *args, **kwargs: CompletedProcess(args[0], 0, None, None),
+    )
+    assert list_dumpcap_interfaces(Path("D:/Wireshark/dumpcap.exe")) == []

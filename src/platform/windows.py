@@ -4,6 +4,7 @@ import shutil
 import subprocess
 
 from .base import PlatformAdapter
+from .interfaces import decode_command_output
 
 
 class NpcapUnavailableError(RuntimeError):
@@ -45,10 +46,11 @@ def _interfaces(tool: Path) -> list[dict[str, str]]:
         shell=False,
         check=False,
         capture_output=True,
-        text=True,
         timeout=10,
     )
-    diagnostic = f"{result.stdout}\n{result.stderr}".strip()
+    stdout = decode_command_output(result.stdout)
+    stderr = decode_command_output(result.stderr)
+    diagnostic = f"{stdout}\n{stderr}".strip()
     if "Unable to load Npcap" in diagnostic or "wpcap.dll" in diagnostic:
         raise NpcapUnavailableError(
             "dumpcap was found, but Npcap could not be loaded. Repair or reinstall "
@@ -60,6 +62,6 @@ def _interfaces(tool: Path) -> list[dict[str, str]]:
         )
     return [
         {"index": line.split(".", 1)[0], "name": line.split(".", 1)[1].strip()}
-        for line in result.stdout.splitlines()
+        for line in stdout.splitlines()
         if "." in line
     ]
