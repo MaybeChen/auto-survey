@@ -1,0 +1,97 @@
+# Python bytecode and interpreter caches
+__pycache__/
+*.py[cod]
+*$py.class
+.python-version
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging and build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+pip-wheel-metadata/
+
+# Test, coverage, lint, and type-checker caches
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.nox/
+.mypy_cache/
+.pyright/
+.pyre/
+.ruff_cache/
+.hypothesis/
+
+# IDE and editor settings
+.idea/
+.vscode/
+*.code-workspace
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.swp
+*.swo
+*~
+
+# Operating-system metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+/config.yaml
+config/config.yaml
+*.key
+*.pem
+
+# Runtime logs, PID files, and temporary files
+/logs/
+*.log
+*.pid
+*.tmp
+*.temp
+.cache/
+tmp/
+temp/
+
+# API Survey runtime storage (when storage.root points into the repository)
+/data/
+/capture/
+/work/
+/state/
+/output/
+
+# Captures can contain credentials and sensitive payloads
+*.pcap
+*.pcapng
+*.cap
+!tests/fixtures/*.pcap
+!tests/fixtures/*.pcapng
+!tests/fixtures/*.cap
+
+# Local databases and SQLite sidecar files
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
