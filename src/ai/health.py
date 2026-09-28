@@ -2,10 +2,21 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlsplit
 
 from src.ai.client import HTTPAIClient
 from src.config import AIConfig
 from src.models import EndpointAnalysisRequest
+
+
+def _safe_endpoint(base_url: str) -> str:
+    """Return the effective endpoint without credentials, query, or fragment."""
+    parsed = urlsplit(base_url.rstrip("/"))
+    host = parsed.hostname or ""
+    if ":" in host:
+        host = f"[{host}]"
+    authority = f"{host}:{parsed.port}" if parsed.port else host
+    return f"{parsed.scheme}://{authority}{parsed.path}/chat/completions"
 
 
 def check_ai(config: AIConfig) -> dict[str, Any]:
@@ -24,6 +35,7 @@ def check_ai(config: AIConfig) -> dict[str, Any]:
         config.retries,
         config.trust_env_proxy,
     )
+    endpoint = _safe_endpoint(config.base_url)
     request = EndpointAnalysisRequest(
         host="ai-healthcheck.invalid",
         method="GET",
@@ -37,12 +49,14 @@ def check_ai(config: AIConfig) -> dict[str, Any]:
         return {
             "healthy": False,
             "model": config.model,
+            "endpoint": endpoint,
             "authenticated": bool(config.api_key_env),
             "error": str(exc),
         }
     return {
         "healthy": True,
         "model": config.model,
+        "endpoint": endpoint,
         "authenticated": bool(config.api_key_env),
         "structuredOutputValid": True,
         "normalizedPath": result.normalized_path,

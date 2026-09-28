@@ -279,6 +279,20 @@ $LASTEXITCODE
 `CONNECTION_ERROR_ProxyError` 表示旧版本或显式启用代理后，请求被环境代理拦截；本地模型
 应设置 `trust_env_proxy: false` 并重新安装当前项目。临时排查也可以在当前 PowerShell 中
 设置 `$env:NO_PROXY = "127.0.0.1,localhost,模型服务器IP"`。
+`CONNECTION_ERROR_ConnectError` 表示已经绕过代理，但 TCP 连接仍未建立：通常是服务未启动、
+IP/端口错误、服务只监听其他网卡、Docker/WSL 未映射端口或防火墙拒绝连接。`check-ai`
+输出中的 `endpoint` 是程序实际请求的脱敏地址，可直接据此检查主机、端口和路径。
+
+```powershell
+# 将主机和端口替换成 endpoint 中的值
+Test-NetConnection -ComputerName 127.0.0.1 -Port 8000
+Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
+```
+
+如果模型在 Docker 中，还应执行 `docker ps` 并确认端口列包含类似
+`0.0.0.0:8000->8000/tcp`；如果在 WSL 中，应先在 WSL 内使用 `curl` 测试，再确认 Windows
+能访问该端口。服务只监听 `127.0.0.1` 时只能由同一台主机访问；远程部署应按安全策略监听
+可达网卡并配置防火墙，切勿无鉴权暴露到不可信网络。
 
 可先绕过本项目，用 PowerShell 直接检查服务的模型列表和 Chat Completions 端点。以下
 示例适用于无需鉴权的本地服务；地址应与配置中的 `base_url` 一致：

@@ -38,6 +38,7 @@ def test_check_ai_uses_synthetic_evidence_and_reports_structured_output(monkeypa
     assert result == {
         "healthy": True,
         "model": "local-model",
+        "endpoint": "http://127.0.0.1:8000/v1/chat/completions",
         "authenticated": False,
         "structuredOutputValid": True,
         "normalizedPath": "/__api_survey_health__",
@@ -86,6 +87,7 @@ def test_check_ai_returns_secret_free_failure(monkeypatch):
     assert result == {
         "healthy": False,
         "model": "model",
+        "endpoint": "https://ai.example.test/v1/chat/completions",
         "authenticated": True,
         "error": "FAILED_AI_PARSE",
     }
@@ -127,3 +129,21 @@ def test_ai_client_reports_http_status_without_response_body(monkeypatch):
             )
         )
     assert "sensitive provider details" not in str(error.value)
+
+
+def test_ai_health_endpoint_omits_url_credentials_and_query(monkeypatch):
+    def fail(_client, _request):
+        raise RuntimeError("FAILED_AI_PARSE: CONNECTION_ERROR_ConnectError")
+
+    monkeypatch.setattr("src.ai.health.HTTPAIClient.analyze_endpoint", fail)
+    result = check_ai(
+        AIConfig(
+            enabled=True,
+            model="qwen",
+            base_url="http://user:secret@127.0.0.1:8000/v1?token=hidden",
+            api_key_env="",
+        )
+    )
+    assert result["endpoint"] == "http://127.0.0.1:8000/v1/chat/completions"
+    assert "secret" not in str(result)
+    assert "hidden" not in str(result)
