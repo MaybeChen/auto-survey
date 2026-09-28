@@ -179,6 +179,64 @@ Unregister-ScheduledTask -TaskName 'API Survey Agent' -Confirm:$false
 
 所有路径通过 `storage.root` 和 `pathlib` 派生。Windows/Linux 示例分别位于 `config/`。API Key 只从 `ai.api_key_env` 指定的环境变量读取；不写入 YAML 或日志。AI 默认关闭，因此无模型也能生成基础事实层。 数据库默认启用，`database.url` 留空时使用 `storage.root/state/agent.db`；如需无数据库运行，可显式设置 `database: {enabled: false, url: ""}`，此模式仍会完整生成接口 JSON、Catalog、OpenAPI 和分析报告。
 
+### AI 配置
+
+当前 AI transport 支持兼容 OpenAI Chat Completions 的 HTTP 服务，并要求模型能够根据
+`response_format: {type: json_object}` 返回结构化 JSON。`base_url` 填 API 根地址，代码会
+自动追加 `/chat/completions`，所以不要把该后缀重复写入配置：
+
+```yaml
+ai:
+  enabled: true
+  provider: "openai-compatible" # 当前仅用于标识，transport 不根据它切换实现
+  model: "你的模型部署名"
+  base_url: "https://你的服务地址/v1"
+  api_key_env: "AI_API_KEY"
+  retries: 2
+```
+
+`model` 必须是服务端接受的模型名或部署名。`retries` 是首次请求失败后的额外重试次数。
+需要鉴权时，API Key 只能放在 `api_key_env` 指定的环境变量中，不能把真实密钥写进 YAML。Windows
+PowerShell 可使用管理员终端写入机器级变量（计划任务通常以 `SYSTEM` 运行）：
+
+```powershell
+[Environment]::SetEnvironmentVariable('AI_API_KEY', '实际密钥', 'Machine')
+```
+
+当前 PowerShell 会话如需立即测试，还应同时设置进程级变量：
+
+```powershell
+$env:AI_API_KEY = '实际密钥'
+```
+
+如果使用无需鉴权的本地或内网自部署模型，将 `api_key_env` 设置为空字符串即可。此时
+客户端不会检查环境变量，也不会发送 `Authorization` 请求头：
+
+```yaml
+ai:
+  enabled: true
+  provider: "openai-compatible"
+  model: "本地模型名"
+  base_url: "http://127.0.0.1:8000/v1"
+  api_key_env: ""
+  retries: 2
+```
+
+只有确认模型服务所在网络边界可信且服务本身确实不要求鉴权时才应使用此模式。如果填写
+了环境变量名称（例如 `AI_API_KEY`），对应变量缺失仍会立即报错，防止意外匿名请求公网服务。
+
+配置完成后，用 `--force` 重新分析已经处理过的 pcap，才能重新调用 AI：
+
+```powershell
+.\.venv\Scripts\api-survey.exe --config .\config.yaml analyze "D:\path\traffic.pcapng" --force
+```
+
+AI 只接收完成递归脱敏后的 Transaction 样本。模型响应还会经过 Pydantic 结构校验和
+Evidence Validator；模型无法访问 pcap、文件系统或 Shell。若 AI 服务不可达、密钥缺失、
+返回非 JSON 或 JSON 不符合结果模型，本次分析会失败并记录状态，而不会静默发布未经验证
+的 AI 内容。若暂时不需要语义说明，保持 `enabled: false` 即可继续生成基础 Schema、接口
+JSON、Catalog 和 OpenAPI。
+
 ```bash
 api-survey --config config.yaml analyze demo.pcapng
 api-survey --config config.yaml watch

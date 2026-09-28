@@ -4,15 +4,16 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 from src.ai.analyzer import deterministic_analysis
+from src.ai.client import HTTPAIClient
 from src.capture.dumpcap import DumpcapBackend
 from src.capture.scanner import CaptureScanner
-from src.config import AnalysisConfig, AppConfig
+from src.config import AnalysisConfig, AppConfig, load_config
 from src.database import Database
 from src.endpoint.cluster import group_transactions
 from src.endpoint.ignore import should_ignore_transaction
 from src.endpoint.normalizer import normalize_path,path_matches
 from src.endpoint.samples import observe_fields
-from src.models import EndpointAnalysisResult,HTTPRequest,HTTPResponse,Transaction,CaptureStatus
+from src.models import EndpointAnalysisRequest,EndpointAnalysisResult,HTTPRequest,HTTPResponse,Transaction,CaptureStatus
 from src.output.interface_json import build_interface
 from src.output.openapi import generate_openapi
 from src.platform.factory import get_platform_adapter
@@ -50,6 +51,81 @@ def test_database_defaults_enabled_and_scanner_emits_once(tmp_path):
     assert scanner.scan() == []
     assert scanner.scan() == [capture]
     assert scanner.scan() == []
+
+
+def test_ai_configuration_reads_transport_settings_without_a_secret(tmp_path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        """\
+ai:
+  enabled: true
+  provider: openai-compatible
+  model: survey-model
+  base_url: https://ai.example.test/v1
+  api_key_env: SURVEY_AI_KEY
+  retries: 3
+""",
+        encoding="utf-8",
+    )
+    config = load_config(config_file)
+    assert config.ai.enabled is True
+    assert config.ai.model == "survey-model"
+    assert config.ai.base_url == "https://ai.example.test/v1"
+    assert config.ai.api_key_env == "SURVEY_AI_KEY"
+    assert config.ai.retries == 3
+
+
+def test_ai_client_supports_explicit_anonymous_self_hosted_service(monkeypatch):
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "normalized_path": "/health",
+                                    "request_schema": {},
+                                    "responses": {},
+                                    "confidence": 1.0,
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+
+    captured = {}
+
+    def fake_post(url, **kwargs):
+        captured["url"] = url
+        captured.update(kwargs)
+        return Response()
+
+    monkeypatch.setattr("src.ai.client.httpx.post", fake_post)
+    client = HTTPAIClient("http://127.0.0.1:8000/v1", "local-model", "")
+    result = client.analyze_endpoint(
+        EndpointAnalysisRequest(
+            host="localhost", method="GET", normalized_path="/health", samples=[]
+        )
+    )
+    assert result.normalized_path == "/health"
+    assert captured["url"] == "http://127.0.0.1:8000/v1/chat/completions"
+    assert captured["headers"] == {}
+
+
+def test_ai_client_requires_configured_environment_variable(monkeypatch):
+    monkeypatch.delenv("MISSING_SURVEY_KEY", raising=False)
+    client = HTTPAIClient("https://ai.example.test/v1", "model", "MISSING_SURVEY_KEY")
+    with pytest.raises(RuntimeError, match="MISSING_SURVEY_KEY"):
+        client.analyze_endpoint(
+            EndpointAnalysisRequest(
+                host="example.test", method="GET", normalized_path="/health", samples=[]
+            )
+        )
 
 
 def test_command_builders(tmp_path):
