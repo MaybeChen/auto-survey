@@ -8,6 +8,7 @@ from src.config import AppConfig
 from src.database import Database
 from src.output.atomic import atomic_write_text
 from src.platform import PlatformAdapter, get_platform_adapter
+from src.platform.interfaces import list_dumpcap_interfaces
 
 
 def run_checks(
@@ -27,12 +28,15 @@ def run_checks(
     paths = config.create_directories()
     check("tshark", lambda: config.tshark.path or platform_adapter.find_tshark())
     check("dumpcap", lambda: config.dumpcap.path or platform_adapter.find_dumpcap())
-    check(
-        "capture-permissions",
-        lambda: "available"
-        if platform_adapter.validate_capture_permissions()
-        else (_ for _ in ()).throw(RuntimeError("capture permission check failed")),
-    )
+    def capture_check() -> str:
+        if config.dumpcap.path:
+            interfaces = list_dumpcap_interfaces(config.dumpcap.path)
+            return f"available ({len(interfaces)} interfaces)"
+        if not platform_adapter.validate_capture_permissions():
+            raise RuntimeError("capture permission check failed")
+        return "available"
+
+    check("capture-permissions", capture_check)
 
     def storage_check() -> Path:
         probe = paths["state"] / ".healthcheck"

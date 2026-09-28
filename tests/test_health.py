@@ -31,3 +31,21 @@ def test_doctor_checks_storage_tools_permissions_and_database(tmp_path):
         "database",
     }
     assert (tmp_path / "state" / "agent.db").is_file()
+
+
+def test_doctor_uses_explicit_dumpcap_path(tmp_path, monkeypatch):
+    config = AppConfig(storage=StorageConfig(root=tmp_path))
+    config.dumpcap.path = Path("D:/Wireshark/dumpcap.exe")
+    monkeypatch.setattr(
+        "src.health.list_dumpcap_interfaces",
+        lambda executable: [{"index": "1", "name": str(executable)}],
+    )
+    result = run_checks(config, HealthyAdapter())
+    permission = next(
+        check for check in result["checks"] if check["name"] == "capture-permissions"
+    )
+    assert permission == {
+        "name": "capture-permissions",
+        "ok": True,
+        "detail": "available (1 interfaces)",
+    }

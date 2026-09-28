@@ -6,6 +6,7 @@ from src.config import load_config
 from src.database import Database
 from src.output.openapi import generate_openapi,load_interfaces
 from src.platform import get_platform_adapter
+from src.platform.interfaces import list_dumpcap_interfaces
 from src.health import run_checks
 def main(argv:list[str]|None=None)->int:
     parser=argparse.ArgumentParser(prog="api-survey"); parser.add_argument("--config",type=Path); sub=parser.add_subparsers(dest="command",required=True)
@@ -24,7 +25,9 @@ def main(argv:list[str]|None=None)->int:
             report=paths["reports"]/"analysis-summary.json"
             payload={"databaseEnabled":False,"lastAnalysis":json.loads(report.read_text(encoding="utf-8")) if report.exists() else None}
             print(json.dumps(payload,indent=2,ensure_ascii=False))
-    elif args.command=="list-interfaces": print(json.dumps(get_platform_adapter().list_interfaces(),indent=2))
+    elif args.command=="list-interfaces":
+        interfaces=(list_dumpcap_interfaces(config.dumpcap.path) if config.dumpcap.path else get_platform_adapter().list_interfaces())
+        print(json.dumps(interfaces,indent=2))
     elif args.command=="doctor":
         result=run_checks(config); print(json.dumps(result,indent=2,ensure_ascii=False))
         return 0 if result["healthy"] else 1

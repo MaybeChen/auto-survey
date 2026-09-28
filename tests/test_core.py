@@ -169,3 +169,19 @@ def test_database_aggregates_endpoint_samples_across_captures(tmp_path):
     report = database.status_report()
     assert report["captureFiles"] == [{"status": "DISCOVERED", "count": 2}]
     assert report["endpoints"] == [{"status": "DISCOVERED", "count": 1}]
+
+
+def test_configured_dumpcap_interface_parser(monkeypatch):
+    from subprocess import CompletedProcess
+    from src.platform.interfaces import list_dumpcap_interfaces
+
+    monkeypatch.setattr(
+        "src.platform.interfaces.subprocess.run",
+        lambda *args, **kwargs: CompletedProcess(
+            args[0], 0, "1. Ethernet\n2. Wi-Fi\n", ""
+        ),
+    )
+    assert list_dumpcap_interfaces(Path("D:/Wireshark/dumpcap.exe")) == [
+        {"index": "1", "name": "Ethernet"},
+        {"index": "2", "name": "Wi-Fi"},
+    ]

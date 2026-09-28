@@ -58,6 +58,17 @@ cp config/config.example.yaml config.yaml
 
    `dumpcap -D` 会输出接口编号和名称，例如 `1. \Device\NPF_{...} (Ethernet)`。记录要抓取的接口编号。只要该命令能够正常列出接口，Npcap 就已经可供 dumpcap 使用，即使安装 Wireshark 时没有看见 Npcap 页面。若 `tshark`/`dumpcap` 存在但 `dumpcap -D` 不显示接口或提示找不到捕获驱动，再单独修复或安装 Npcap，并检查 `npcap` 服务。
 
+   如果 Wireshark 安装在非默认目录，例如 `D:\Wireshark`，请改用 `& 'D:\Wireshark\tshark.exe' --version` 和 `& 'D:\Wireshark\dumpcap.exe' -D` 验证，并在 `config.yaml` 中显式设置：
+
+   ```yaml
+   tshark:
+     path: "D:/Wireshark/tshark.exe"
+   dumpcap:
+     path: "D:/Wireshark/dumpcap.exe"
+   ```
+
+   YAML 中推荐使用正斜杠。`analyze`、Capture Service、`list-interfaces` 和 `doctor` 都会优先使用显式配置的工具路径，无需修改系统 `PATH`。
+
 #### 2. 安装 Python 程序
 
 普通 PowerShell 即可执行安装脚本。若系统执行策略阻止本地脚本，只对本次进程临时放行：
