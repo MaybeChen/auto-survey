@@ -271,7 +271,13 @@ def watch(config: AppConfig, once: bool = False) -> None:
     scanner = CaptureScanner(paths["incoming"], config.capture.stable_seconds)
     while True:
         for path in scanner.scan():
-            analyze_file(path, config)
+            try:
+                analyze_file(path, config)
+            except Exception:
+                # A corrupt capture or a temporary AI failure must not stop the
+                # watcher from processing later rotated files. analyze_file has
+                # already persisted the failure and logged its detailed cause.
+                LOG.exception("watch skipped failed capture %s", path)
         if once:
             return
         time.sleep(5)

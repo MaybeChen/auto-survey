@@ -145,3 +145,29 @@ def test_analysis_excludes_static_resources_before_persistence(tmp_path, monkeyp
     redacted_files = list((tmp_path / "data" / "work" / "redacted").glob("*.json"))
     redacted = json.loads(redacted_files[0].read_text())
     assert [item["request"]["path"] for item in redacted] == ["/users/1001"]
+
+
+def test_watch_continues_after_one_capture_fails(tmp_path, monkeypatch):
+    config = AppConfig(storage=StorageConfig(root=tmp_path / "data"))
+    failed = tmp_path / "failed.pcapng"
+    successful = tmp_path / "successful.pcapng"
+    processed = []
+
+    class Scanner:
+        def __init__(self, _incoming, _stable_seconds):
+            pass
+
+        def scan(self):
+            return [failed, successful]
+
+    def analyze(path, _config):
+        processed.append(path)
+        if path == failed:
+            raise RuntimeError("broken capture")
+
+    monkeypatch.setattr(agent, "CaptureScanner", Scanner)
+    monkeypatch.setattr(agent, "analyze_file", analyze)
+
+    agent.watch(config, once=True)
+
+    assert processed == [failed, successful]

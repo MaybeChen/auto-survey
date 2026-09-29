@@ -192,6 +192,37 @@ Unregister-ScheduledTask -TaskName 'API Survey Agent' -Confirm:$false
 
 ### 整体运行流程与启用 AI 后的变化
 
+**可以自动完成，但不是对正在写入的包逐包实时分析。** 同时启动 capture 与 agent 后，capture
+服务先用 dumpcap/tcpdump 按时长或大小轮转文件；agent 每 5 秒扫描一次 `capture/incoming`，只在
+文件超过 `stable_seconds` 且连续两次扫描大小不变后，才执行解析、脱敏、聚合、AI 分析和输出。
+因此使用 `duration_seconds: 30` 时，通常要等待当前文件轮转，再额外等待稳定检查，而不是发出
+一次请求后立即看到文件。单个坏包或临时 AI 错误会被记录为失败并跳过，watcher 会继续处理后续
+轮转文件。
+
+无人值守运行需要同时满足：
+
+1. `API Survey Capture` 和 `API Survey Agent` 两个任务都处于运行状态；
+2. 抓包接口正确，并且业务流量命中 `capture.filter`；
+3. 流量是当前版本支持的明文 HTTP/1.1（HTTPS 只能识别为 TLS，无法直接还原接口）；
+4. `ai.enabled: true` 且 `check-ai` 返回 `healthy: true`；
+5. 运行任务的账户对 `storage.root`、tshark/dumpcap 和所需证书具有访问权限。
+
+Windows 可用以下命令确认任务和日志：
+
+```powershell
+Get-ScheduledTask -TaskName 'API Survey Capture','API Survey Agent' |
+  Select-Object TaskName, State
+Get-Content .\logs\capture.log -Tail 50
+Get-Content .\logs\agent.log -Tail 100
+```
+
+成功处理后，主要最终产物位于 `<storage.root>/output/`：每个接口一个
+`interfaces/*.json`，汇总索引为 `api-catalog.json`，OpenAPI 为
+`openapi/openapi.json`（启用 `generate_openapi` 时），本次摘要为
+`reports/analysis-summary.json`。数据库位于 `state/agent.db`，脱敏中间证据位于
+`work/redacted/`。`min_samples` 或 `publish_confidence` 未达到时仍会写出当前结果，但接口状态为
+`PENDING_MORE_SAMPLES`，后续轮转文件会继续累积样本。
+
 无论是否启用 AI，前半段都是确定性流程：发现稳定 pcap → SHA256 去重与状态恢复 → tshark
 协议探测 → HTTP/1.1 字段提取 → 确定性请求/响应配对 → JSON Body 解码 → 静态资源过滤 →
 递归脱敏 → Endpoint 归一化和多样本聚合。SQLite 启用时，新样本会与历史脱敏样本合并。
