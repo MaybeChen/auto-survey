@@ -273,6 +273,26 @@ ai:
 如果 `AutoConfigURL` 指向 PAC，httpx 不会执行 PAC 脚本；应从网络管理员取得该目标对应的
 实际代理地址，不能把 PAC URL 直接当作代理 URL。计划任务运行时需把变量设置为机器级，
 并重启任务：`[Environment]::SetEnvironmentVariable('AI_HTTPS_PROXY', '代理URL', 'Machine')`。
+
+例如 Windows Internet Settings 返回 `ProxyEnable=1`、
+`ProxyServer=proxyau.huawei.com:8080` 且 `AutoConfigURL` 为空，而 WinHTTP 显示直连时，说明
+Postman 使用的是当前用户 WinINET 代理，不是 WinHTTP 代理。可按下面方式映射给本项目：
+
+```powershell
+# 当前 PowerShell 立即生效
+$env:AI_HTTPS_PROXY = "http://proxyau.huawei.com:8080"
+
+# 验证代理自身及目标地址（Windows PowerShell 5.1）
+Invoke-WebRequest `
+  -Uri "https://tpsp.dev.huawei.com/llm/qwen3.6/v1/models" `
+  -Proxy "http://proxyau.huawei.com:8080" `
+  -ProxyUseDefaultCredentials
+```
+
+对应配置使用 `trust_env_proxy: false` 和 `proxy_url_env: "AI_HTTPS_PROXY"`，避免同时继承
+其他环境代理。若返回 HTTP 407，说明代理要求 Windows 集成认证；Postman 可以使用当前用户
+凭据，但 Python/httpx 默认不会自动执行 NTLM/Kerberos。此时应优先申请服务账号可用的代理、
+目标域名直连白名单或运维提供的认证方式，而不是把 Windows 密码写进配置文件。
 `send_response_format` 控制是否发送 OpenAI 的 `response_format: {type: json_object}`。
 某些兼容服务（包括只接受你在 Postman 中展示的最小请求体的服务）不支持该参数，可设为
 `false`；客户端仍会通过 system prompt 要求 JSON，并继续用 Pydantic 严格验证响应。
