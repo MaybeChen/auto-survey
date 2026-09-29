@@ -344,6 +344,12 @@ ai:
 主机名校验，等价于 Java 中的 trust-all 行为，存在中间人攻击风险，不应作为生产配置。
 客户端会输出 WARNING，`check-ai` 也会返回 `tlsVerified: false`。测试完必须恢复为 `true`。
 
+如果关闭 TLS 后错误推进到 `INVALID_STRUCTURED_OUTPUT_ValidationError`，说明网络、代理、TLS
+和 HTTP 调用均已成功，剩余问题只是模型内容格式。客户端会把完整
+`EndpointAnalysisResult` JSON Schema 放入 system prompt，并兼容单个常见的
+```` ```json ... ``` ```` 包装；最终仍必须通过 Pydantic。失败信息只列出字段位置和错误类型，
+例如 `normalized_path:missing`，不会把模型返回的业务内容写入日志。此时不应继续修改代理。
+
 还应查看 Java 运行时 `LLMConfig.proxyAddress` 的实际值：为空表示 Java 直连；形如
 `host:port` 表示无认证代理；形如 `username:password@host:port` 表示 Basic 代理。请勿提供
 真实密码，只需确认属于哪一种情况。

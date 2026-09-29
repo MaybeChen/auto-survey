@@ -2,16 +2,27 @@ import httpx
 import pytest
 
 from src.ai.client import HTTPAIClient
+from src.ai.client import _validation_failure
 from src.ai.health import check_ai
 from src.config import AIConfig
 from src.models import EndpointAnalysisResult
 from src.models import EndpointAnalysisRequest
+from pydantic import ValidationError
 
 
 def test_check_ai_rejects_disabled_or_incomplete_configuration():
     assert check_ai(AIConfig())["error"] == "AI is disabled in configuration"
     assert check_ai(AIConfig(enabled=True, model="model"))["error"] == "ai.base_url is empty"
     assert check_ai(AIConfig(enabled=True, base_url="http://localhost/v1"))["error"] == "ai.model is empty"
+
+
+def test_validation_failure_reports_schema_location_without_input():
+    with pytest.raises(ValidationError) as caught:
+        EndpointAnalysisResult.model_validate({"request_schema": {"secret": "do-not-log"}})
+    message = _validation_failure(caught.value)
+    assert "normalized_path:missing" in message
+    assert "confidence:missing" in message
+    assert "do-not-log" not in message
 
 
 def test_check_ai_uses_synthetic_evidence_and_reports_structured_output(monkeypatch):

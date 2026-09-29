@@ -158,6 +158,37 @@ def test_ai_client_can_omit_unsupported_response_format(monkeypatch):
     )
     assert captured["json"]["stream"] is False
     assert "response_format" not in captured["json"]
+    system_prompt = captured["json"]["messages"][0]["content"]
+    assert '"normalized_path"' in system_prompt
+    assert '"confidence"' in system_prompt
+
+
+def test_ai_client_accepts_valid_json_in_markdown_fence(monkeypatch):
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            content = json.dumps({
+                "normalized_path": "/health",
+                "request_schema": {},
+                "responses": {},
+                "confidence": 0.8,
+            })
+            return {"choices": [{"message": {"content": f"```json\n{content}\n```"}}]}
+
+    monkeypatch.setattr("src.ai.client.httpx.post", lambda *_args, **_kwargs: Response())
+    client = HTTPAIClient(
+        "https://ai.example.test/v1", "qwen", "", retries=0,
+        send_response_format=False,
+    )
+    result = client.analyze_endpoint(
+        EndpointAnalysisRequest(
+            host="test", method="GET", normalized_path="/health", samples=[]
+        )
+    )
+    assert result.normalized_path == "/health"
+    assert result.confidence == 0.8
 
 
 def test_ai_client_uses_proxy_from_named_environment_variable(monkeypatch):

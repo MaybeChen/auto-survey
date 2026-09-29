@@ -6,12 +6,36 @@ import logging
 import os
 
 import httpx
+from pydantic import ValidationError
 
 from src.models import EndpointAnalysisRequest, EndpointAnalysisResult
 
 from .base import AIClient
 
 LOG = logging.getLogger(__name__)
+
+
+def _validate_structured_content(content: str) -> EndpointAnalysisResult:
+    """Validate JSON content, accepting a single common Markdown JSON fence."""
+    try:
+        return EndpointAnalysisResult.model_validate_json(content)
+    except ValidationError:
+        cleaned = content.strip()
+        if cleaned.startswith("```") and cleaned.endswith("```"):
+            first_newline = cleaned.find("\n")
+            if first_newline != -1:
+                cleaned = cleaned[first_newline + 1 : -3].strip()
+                return EndpointAnalysisResult.model_validate_json(cleaned)
+        raise
+
+
+def _validation_failure(exc: ValidationError) -> str:
+    """Summarize validation locations and types without exposing model content."""
+    issues = []
+    for error in exc.errors(include_input=False)[:5]:
+        location = ".".join(str(part) for part in error["loc"]) or "root"
+        issues.append(f"{location}:{error['type']}")
+    return "INVALID_STRUCTURED_OUTPUT_ValidationError[" + ",".join(issues) + "]"
 
 
 def _request_failure(exc: httpx.RequestError) -> str:
@@ -81,12 +105,16 @@ class HTTPAIClient(AIClient):
             LOG.warning("AI TLS certificate and hostname verification are disabled")
         payload = request.model_dump(mode="json")
         # This boundary receives redacted samples only; it has no filesystem API.
+        result_schema = json.dumps(
+            EndpointAnalysisResult.model_json_schema(), ensure_ascii=False
+        )
         messages = [
             {
                 "role": "system",
                 "content": (
                     "Infer an API schema only from evidence. Return JSON matching "
-                    "EndpointAnalysisResult; never invent fields."
+                    "EndpointAnalysisResult; never invent fields. Return only the JSON "
+                    f"object, without Markdown fences. JSON Schema: {result_schema}"
                 ),
             },
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
@@ -112,7 +140,7 @@ class HTTPAIClient(AIClient):
                 )
                 response.raise_for_status()
                 content = response.json()["choices"][0]["message"]["content"]
-                return EndpointAnalysisResult.model_validate_json(content)
+                return _validate_structured_content(content)
             except httpx.HTTPStatusError as exc:
                 failure = f"HTTP_STATUS_{exc.response.status_code}"
             except httpx.TimeoutException:
@@ -121,6 +149,8 @@ class HTTPAIClient(AIClient):
                 failure = _request_failure(exc)
             except (KeyError, IndexError, TypeError):
                 failure = "INVALID_CHAT_COMPLETIONS_RESPONSE"
+            except ValidationError as exc:
+                failure = _validation_failure(exc)
             except ValueError as exc:
                 failure = f"INVALID_STRUCTURED_OUTPUT_{type(exc).__name__}"
         raise RuntimeError(f"FAILED_AI_PARSE: {failure}")
