@@ -257,6 +257,26 @@ def test_ai_client_supports_explicit_tls_policy(monkeypatch):
     assert captured["verify"] is False
 
 
+def test_ai_client_adds_enterprise_ca_to_default_tls_context(monkeypatch, tmp_path):
+    from src.ai.client import _tls_verifier
+
+    bundle = tmp_path / "enterprise-ca.pem"
+    bundle.write_text("test certificate placeholder", encoding="utf-8")
+    class Context:
+        def __init__(self):
+            self.cafile = None
+
+        def load_verify_locations(self, *, cafile):
+            self.cafile = cafile
+
+    context = Context()
+
+    monkeypatch.setattr("src.ai.client.ssl.create_default_context", lambda: context)
+    result = _tls_verifier(True, str(bundle))
+    assert result is context
+    assert context.cafile == str(bundle)
+
+
 def test_ai_client_requires_configured_environment_variable(monkeypatch):
     monkeypatch.delenv("MISSING_SURVEY_KEY", raising=False)
     client = HTTPAIClient("https://ai.example.test/v1", "model", "MISSING_SURVEY_KEY")

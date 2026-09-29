@@ -53,6 +53,7 @@ def test_check_ai_uses_synthetic_evidence_and_reports_structured_output(monkeypa
         "authenticated": False,
         "proxyConfigured": False,
         "tlsVerified": True,
+        "syntheticEvidence": True,
         "structuredOutputValid": True,
         "normalizedPath": "/__api_survey_health__",
         "confidence": 0.9,
@@ -104,6 +105,7 @@ def test_check_ai_returns_secret_free_failure(monkeypatch):
         "authenticated": True,
         "proxyConfigured": False,
         "tlsVerified": True,
+        "syntheticEvidence": True,
         "error": "FAILED_AI_PARSE",
     }
 

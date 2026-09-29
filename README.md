@@ -343,6 +343,10 @@ ai:
 仅为一次性定位“是否为证书链问题”，可临时设置 `tls_verify: false`；这会同时跳过证书与
 主机名校验，等价于 Java 中的 trust-all 行为，存在中间人攻击风险，不应作为生产配置。
 客户端会输出 WARNING，`check-ai` 也会返回 `tlsVerified: false`。测试完必须恢复为 `true`。
+配置 `ca_bundle` 时，客户端会在 Python 默认可信根证书基础上额外加载企业 CA，而不是关闭
+验证或只信任企业 CA。`check-ai` 的请求使用空的合成样本，因此返回 `confidence: 0.0` 也完全
+正常；健康判定应看 `healthy` 和 `structuredOutputValid`，不能把该置信度当作真实 Endpoint
+的分析质量。结果中的 `syntheticEvidence: true` 会明确标识这一点。
 
 如果关闭 TLS 后错误推进到 `INVALID_STRUCTURED_OUTPUT_ValidationError`，说明网络、代理、TLS
 和 HTTP 调用均已成功，剩余问题只是模型内容格式。客户端会把完整

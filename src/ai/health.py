@@ -57,6 +57,7 @@ def check_ai(config: AIConfig) -> dict[str, Any]:
             "authenticated": bool(config.api_key_env),
             "proxyConfigured": bool(config.proxy_url_env or config.trust_env_proxy),
             "tlsVerified": config.tls_verify or bool(config.ca_bundle),
+            "syntheticEvidence": True,
             "error": str(exc),
         }
     return {
@@ -66,6 +67,7 @@ def check_ai(config: AIConfig) -> dict[str, Any]:
         "authenticated": bool(config.api_key_env),
         "proxyConfigured": bool(config.proxy_url_env or config.trust_env_proxy),
         "tlsVerified": config.tls_verify or bool(config.ca_bundle),
+        "syntheticEvidence": True,
         "structuredOutputValid": True,
         "normalizedPath": result.normalized_path,
         "confidence": result.confidence,

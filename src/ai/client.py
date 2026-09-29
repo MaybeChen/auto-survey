@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import ssl
 
 import httpx
 from pydantic import ValidationError
@@ -36,6 +37,15 @@ def _validation_failure(exc: ValidationError) -> str:
         location = ".".join(str(part) for part in error["loc"]) or "root"
         issues.append(f"{location}:{error['type']}")
     return "INVALID_STRUCTURED_OUTPUT_ValidationError[" + ",".join(issues) + "]"
+
+
+def _tls_verifier(tls_verify: bool, ca_bundle: str | None) -> bool | ssl.SSLContext:
+    """Build secure defaults and optionally add an enterprise CA bundle."""
+    if not ca_bundle:
+        return tls_verify
+    context = ssl.create_default_context()
+    context.load_verify_locations(cafile=ca_bundle)
+    return context
 
 
 def _request_failure(exc: httpx.RequestError) -> str:
@@ -100,7 +110,7 @@ class HTTPAIClient(AIClient):
             raise RuntimeError(
                 f"AI proxy environment variable {self.proxy_url_env} is not set"
             )
-        verify: bool | str = self.ca_bundle or self.tls_verify
+        verify = _tls_verifier(self.tls_verify, self.ca_bundle)
         if verify is False:
             LOG.warning("AI TLS certificate and hostname verification are disabled")
         payload = request.model_dump(mode="json")
