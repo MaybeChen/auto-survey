@@ -207,6 +207,7 @@ ai:
   api_key_env: "AI_API_KEY"
   retries: 2
   trust_env_proxy: false
+  proxy_url_env: ""
   send_response_format: true
 ```
 
@@ -236,6 +237,7 @@ ai:
   api_key_env: ""
   retries: 2
   trust_env_proxy: false
+  proxy_url_env: ""
   send_response_format: false
 ```
 
@@ -244,6 +246,33 @@ ai:
 `trust_env_proxy: false` 是默认值，表示 AI 请求不读取 `HTTP_PROXY`、`HTTPS_PROXY` 和
 `ALL_PROXY`，适合 localhost 或内网自部署模型，可避免请求被系统代理错误转发。只有访问
 外部模型确实必须经过环境代理时才改为 `true`；也可以保持为 `false`，由网络层直接路由。
+Postman 的“使用系统代理”不等于 Python 自动获得相同代理，尤其是 Windows 系统代理或 PAC。
+推荐将实际代理 URL 放入单独环境变量，并通过 `proxy_url_env` 指定变量名；代理地址或凭据
+不写入 YAML，也不会出现在健康检查结果中。例如设置 `proxy_url_env: "AI_HTTPS_PROXY"`。
+
+Windows 上可先查看系统代理来源：
+
+```powershell
+netsh winhttp show proxy
+Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" |
+  Select-Object ProxyEnable, ProxyServer, AutoConfigURL
+```
+
+获得组织批准的实际代理 URL 后，在当前 PowerShell 中设置并配置显式代理：
+
+```powershell
+$env:AI_HTTPS_PROXY = "http://proxy.company.example:8080"
+```
+
+```yaml
+ai:
+  trust_env_proxy: false
+  proxy_url_env: "AI_HTTPS_PROXY"
+```
+
+如果 `AutoConfigURL` 指向 PAC，httpx 不会执行 PAC 脚本；应从网络管理员取得该目标对应的
+实际代理地址，不能把 PAC URL 直接当作代理 URL。计划任务运行时需把变量设置为机器级，
+并重启任务：`[Environment]::SetEnvironmentVariable('AI_HTTPS_PROXY', '代理URL', 'Machine')`。
 `send_response_format` 控制是否发送 OpenAI 的 `response_format: {type: json_object}`。
 某些兼容服务（包括只接受你在 Postman 中展示的最小请求体的服务）不支持该参数，可设为
 `false`；客户端仍会通过 system prompt 要求 JSON，并继续用 Pydantic 严格验证响应。

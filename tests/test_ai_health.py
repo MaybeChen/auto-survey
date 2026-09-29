@@ -40,6 +40,7 @@ def test_check_ai_uses_synthetic_evidence_and_reports_structured_output(monkeypa
         "model": "local-model",
         "endpoint": "http://127.0.0.1:8000/v1/chat/completions",
         "authenticated": False,
+        "proxyConfigured": False,
         "structuredOutputValid": True,
         "normalizedPath": "/__api_survey_health__",
         "confidence": 0.9,
@@ -89,6 +90,7 @@ def test_check_ai_returns_secret_free_failure(monkeypatch):
         "model": "model",
         "endpoint": "https://ai.example.test/v1/chat/completions",
         "authenticated": True,
+        "proxyConfigured": False,
         "error": "FAILED_AI_PARSE",
     }
 

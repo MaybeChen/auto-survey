@@ -74,6 +74,7 @@ ai:
     assert config.ai.api_key_env == "SURVEY_AI_KEY"
     assert config.ai.retries == 3
     assert config.ai.trust_env_proxy is False
+    assert config.ai.proxy_url_env == ""
     assert config.ai.send_response_format is True
 
 
@@ -154,6 +155,40 @@ def test_ai_client_can_omit_unsupported_response_format(monkeypatch):
     )
     assert captured["json"]["stream"] is False
     assert "response_format" not in captured["json"]
+
+
+def test_ai_client_uses_proxy_from_named_environment_variable(monkeypatch):
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"choices": [{"message": {"content": json.dumps({
+                "normalized_path": "/health", "confidence": 1.0
+            })}}]}
+
+    captured = {}
+    monkeypatch.setenv("SURVEY_PROXY", "http://proxy.example.test:8080")
+
+    def fake_post(_url, **kwargs):
+        captured.update(kwargs)
+        return Response()
+
+    monkeypatch.setattr("src.ai.client.httpx.post", fake_post)
+    client = HTTPAIClient(
+        "https://ai.example.test/v1",
+        "qwen",
+        "",
+        retries=0,
+        proxy_url_env="SURVEY_PROXY",
+    )
+    client.analyze_endpoint(
+        EndpointAnalysisRequest(
+            host="test", method="GET", normalized_path="/health", samples=[]
+        )
+    )
+    assert captured["proxy"] == "http://proxy.example.test:8080"
+    assert captured["trust_env"] is False
 
 
 def test_ai_client_requires_configured_environment_variable(monkeypatch):

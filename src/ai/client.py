@@ -33,6 +33,7 @@ class HTTPAIClient(AIClient):
         api_key_env: str = "AI_API_KEY",
         retries: int = 2,
         trust_env_proxy: bool = False,
+        proxy_url_env: str = "",
         send_response_format: bool = True,
     ) -> None:
         self.base_url = base_url.rstrip("/")
@@ -40,6 +41,7 @@ class HTTPAIClient(AIClient):
         self.api_key_env = api_key_env
         self.retries = retries
         self.trust_env_proxy = trust_env_proxy
+        self.proxy_url_env = proxy_url_env
         self.send_response_format = send_response_format
 
     def analyze_endpoint(
@@ -52,6 +54,11 @@ class HTTPAIClient(AIClient):
                 f"AI API key environment variable {self.api_key_env} is not set"
             )
         headers = {"Authorization": f"Bearer {key}"} if key else {}
+        proxy_url = os.environ.get(self.proxy_url_env) if self.proxy_url_env else None
+        if self.proxy_url_env and not proxy_url:
+            raise RuntimeError(
+                f"AI proxy environment variable {self.proxy_url_env} is not set"
+            )
         payload = request.model_dump(mode="json")
         # This boundary receives redacted samples only; it has no filesystem API.
         messages = [
@@ -80,6 +87,7 @@ class HTTPAIClient(AIClient):
                     json=request_json,
                     timeout=60,
                     trust_env=self.trust_env_proxy,
+                    proxy=proxy_url,
                 )
                 response.raise_for_status()
                 content = response.json()["choices"][0]["message"]["content"]

@@ -21,7 +21,7 @@ class AnalysisConfig(BaseModel):
     ignore_paths: list[str]=Field(default_factory=lambda:list(IGNORED_PATHS))
     ignore_extensions: list[str]=Field(default_factory=lambda:list(IGNORED_EXTENSIONS))
 class RedactionConfig(BaseModel): headers: list[str]=Field(default_factory=lambda:list(HEADERS)); json_fields: list[str]=Field(default_factory=lambda:list(FIELDS)); replacement: str="***"
-class AIConfig(BaseModel): enabled: bool=False; provider: str=""; model: str=""; base_url: str=""; api_key_env: str="AI_API_KEY"; retries: int=2; trust_env_proxy: bool=False; send_response_format: bool=True
+class AIConfig(BaseModel): enabled: bool=False; provider: str=""; model: str=""; base_url: str=""; api_key_env: str="AI_API_KEY"; retries: int=2; trust_env_proxy: bool=False; proxy_url_env: str=""; send_response_format: bool=True
 class DatabaseConfig(BaseModel): enabled: bool=True; url: str=""
 class OutputConfig(BaseModel): generate_json: bool=True; generate_openapi: bool=True
 class AppConfig(BaseModel):

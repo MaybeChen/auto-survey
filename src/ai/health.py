@@ -34,6 +34,7 @@ def check_ai(config: AIConfig) -> dict[str, Any]:
         config.api_key_env,
         config.retries,
         config.trust_env_proxy,
+        config.proxy_url_env,
         config.send_response_format,
     )
     endpoint = _safe_endpoint(config.base_url)
@@ -52,6 +53,7 @@ def check_ai(config: AIConfig) -> dict[str, Any]:
             "model": config.model,
             "endpoint": endpoint,
             "authenticated": bool(config.api_key_env),
+            "proxyConfigured": bool(config.proxy_url_env or config.trust_env_proxy),
             "error": str(exc),
         }
     return {
@@ -59,6 +61,7 @@ def check_ai(config: AIConfig) -> dict[str, Any]:
         "model": config.model,
         "endpoint": endpoint,
         "authenticated": bool(config.api_key_env),
+        "proxyConfigured": bool(config.proxy_url_env or config.trust_env_proxy),
         "structuredOutputValid": True,
         "normalizedPath": result.normalized_path,
         "confidence": result.confidence,
