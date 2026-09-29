@@ -9,6 +9,31 @@ def packet(**fields):
     return {"_source": {"layers": fields}}
 
 
+def test_capture_input_error_lists_existing_candidates(tmp_path):
+    existing = tmp_path / "traffic-new.pcapng"
+    existing.write_bytes(b"capture")
+    missing = tmp_path / "traffic-old.pcapng"
+    try:
+        agent._validate_capture_path(missing)
+    except FileNotFoundError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("missing capture should fail")
+    assert "capture file does not exist" in message
+    assert "traffic-new.pcapng" in message
+
+
+def test_capture_input_rejects_unsupported_extension(tmp_path):
+    unsupported = tmp_path / "traffic.txt"
+    unsupported.write_text("not a capture", encoding="utf-8")
+    try:
+        agent._validate_capture_path(unsupported)
+    except ValueError as exc:
+        assert "expected .pcap or .pcapng" in str(exc)
+    else:
+        raise AssertionError("unsupported capture should fail")
+
+
 def packets_for(path: str):
     return [
         packet(
@@ -120,3 +145,29 @@ def test_analysis_excludes_static_resources_before_persistence(tmp_path, monkeyp
     redacted_files = list((tmp_path / "data" / "work" / "redacted").glob("*.json"))
     redacted = json.loads(redacted_files[0].read_text())
     assert [item["request"]["path"] for item in redacted] == ["/users/1001"]
+
+
+def test_watch_continues_after_one_capture_fails(tmp_path, monkeypatch):
+    config = AppConfig(storage=StorageConfig(root=tmp_path / "data"))
+    failed = tmp_path / "failed.pcapng"
+    successful = tmp_path / "successful.pcapng"
+    processed = []
+
+    class Scanner:
+        def __init__(self, _incoming, _stable_seconds):
+            pass
+
+        def scan(self):
+            return [failed, successful]
+
+    def analyze(path, _config):
+        processed.append(path)
+        if path == failed:
+            raise RuntimeError("broken capture")
+
+    monkeypatch.setattr(agent, "CaptureScanner", Scanner)
+    monkeypatch.setattr(agent, "analyze_file", analyze)
+
+    agent.watch(config, once=True)
+
+    assert processed == [failed, successful]

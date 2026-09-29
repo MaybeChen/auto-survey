@@ -63,6 +63,8 @@ def generate_openapi(
             operation["summary"] = item["summary"]
         if _non_blank_string(item.get("description")):
             operation["description"] = item["description"]
+        if item.get("fieldDescriptions"):
+            operation["x-field-descriptions"] = item["fieldDescriptions"]
 
         parameters = _path_parameters(item["path"])
         if parameters:

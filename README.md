@@ -190,6 +190,59 @@ Unregister-ScheduledTask -TaskName 'API Survey Agent' -Confirm:$false
 
 ## 配置与运行
 
+### 整体运行流程与启用 AI 后的变化
+
+**可以自动完成，但不是对正在写入的包逐包实时分析。** 同时启动 capture 与 agent 后，capture
+服务先用 dumpcap/tcpdump 按时长或大小轮转文件；agent 每 5 秒扫描一次 `capture/incoming`，只在
+文件超过 `stable_seconds` 且连续两次扫描大小不变后，才执行解析、脱敏、聚合、AI 分析和输出。
+因此使用 `duration_seconds: 30` 时，通常要等待当前文件轮转，再额外等待稳定检查，而不是发出
+一次请求后立即看到文件。单个坏包或临时 AI 错误会被记录为失败并跳过，watcher 会继续处理后续
+轮转文件。
+
+无人值守运行需要同时满足：
+
+1. `API Survey Capture` 和 `API Survey Agent` 两个任务都处于运行状态；
+2. 抓包接口正确，并且业务流量命中 `capture.filter`；
+3. 流量是当前版本支持的明文 HTTP/1.1（HTTPS 只能识别为 TLS，无法直接还原接口）；
+4. `ai.enabled: true` 且 `check-ai` 返回 `healthy: true`；
+5. 运行任务的账户对 `storage.root`、tshark/dumpcap 和所需证书具有访问权限。
+
+Windows 可用以下命令确认任务和日志：
+
+```powershell
+Get-ScheduledTask -TaskName 'API Survey Capture','API Survey Agent' |
+  Select-Object TaskName, State
+Get-Content .\logs\capture.log -Tail 50
+Get-Content .\logs\agent.log -Tail 100
+```
+
+成功处理后，主要最终产物位于 `<storage.root>/output/`：每个接口一个
+`interfaces/*.json`，汇总索引为 `api-catalog.json`，OpenAPI 为
+`openapi/openapi.json`（启用 `generate_openapi` 时），本次摘要为
+`reports/analysis-summary.json`。数据库位于 `state/agent.db`，脱敏中间证据位于
+`work/redacted/`。`min_samples` 或 `publish_confidence` 未达到时仍会写出当前结果，但接口状态为
+`PENDING_MORE_SAMPLES`，后续轮转文件会继续累积样本。
+
+无论是否启用 AI，前半段都是确定性流程：发现稳定 pcap → SHA256 去重与状态恢复 → tshark
+协议探测 → HTTP/1.1 字段提取 → 确定性请求/响应配对 → JSON Body 解码 → 静态资源过滤 →
+递归脱敏 → Endpoint 归一化和多样本聚合。SQLite 启用时，新样本会与历史脱敏样本合并。
+
+`ai.enabled: false` 时，本地规则根据真实样本推断基础 request/response Schema；`summary` 和
+`description` 保持空值，`unknown` 会标记语义说明需要 AI。`ai.enabled: true` 时，每个聚合后
+Endpoint 的脱敏样本和字段观测会发送给 AI；AI 可以提供接口摘要、描述、语义化路径参数名、
+请求/响应 Schema、字段说明、置信度和不确定项。原始 pcap、原始 Authorization/Cookie 和未
+脱敏 Body 不会进入 AI Client。
+
+AI 返回不会直接发布：Pydantic 先验证结构，Evidence Validator 再检查路径覆盖、真实状态码、
+请求/响应字段和示例证据。不存在的状态码或字段会成为 validation issue，并降低最终
+`confidence`。最终 Standard Interface JSON 保留真实 `observedPaths`、状态码、样本统计与示例，
+同时加入 AI 的 `summary`、`description`、`fieldDescriptions`、Schema 和 `unknown`。OpenAPI 从
+该事实层二次生成，并用 `x-field-descriptions` 保留 AI 字段说明；AI 不直接生成整份 OpenAPI。
+
+当最终置信度低于 `analysis.publish_confidence`，或样本数少于 `analysis.min_samples`，Endpoint
+状态为 `PENDING_MORE_SAMPLES`，但证据和当前接口文档仍会保存以便继续积累。AI 调用失败或
+结构化结果解析失败会记录失败并终止本次分析，不会悄悄回退后发布未经验证的 AI 内容。
+
 所有路径通过 `storage.root` 和 `pathlib` 派生。Windows/Linux 示例分别位于 `config/`。API Key 只从 `ai.api_key_env` 指定的环境变量读取；不写入 YAML 或日志。AI 默认关闭，因此无模型也能生成基础事实层。 数据库默认启用，`database.url` 留空时使用 `storage.root/state/agent.db`；如需无数据库运行，可显式设置 `database: {enabled: false, url: ""}`，此模式仍会完整生成接口 JSON、Catalog、OpenAPI 和分析报告。
 
 ### AI 配置
@@ -362,6 +415,22 @@ ai:
 
 ```powershell
 .\.venv\Scripts\api-survey.exe --config .\config.yaml analyze "D:\path\traffic.pcapng" --force
+```
+
+如果提示 `capture file does not exist`，表示命令中的具体文件名已经不存在（常见于轮转后文件名
+变化），不是 AI 故障。先列出当前真实文件，再把 `FullName` 传给 CLI：
+
+```powershell
+$captures = Get-ChildItem `
+  "D:\CCode\IF\survey-data\capture\incoming" `
+  -File |
+  Where-Object { $_.Extension -in '.pcap', '.pcapng' } |
+  Sort-Object LastWriteTime -Descending
+
+$captures | Select-Object LastWriteTime, Length, FullName
+$pcap = $captures | Select-Object -First 1
+Test-Path -LiteralPath $pcap.FullName
+.\.venv\Scripts\api-survey.exe --config .\config.yaml analyze $pcap.FullName --force
 ```
 
 在分析真实抓包前，可以使用不包含真实流量的合成请求检查模型连通性、鉴权以及结构化

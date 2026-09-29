@@ -56,10 +56,30 @@ def _capture_key(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _validate_capture_path(path: Path) -> None:
+    """Raise an actionable error for a missing or unsupported capture input."""
+    if path.suffix.lower() not in {".pcap", ".pcapng"}:
+        raise ValueError(
+            f"unsupported capture extension {path.suffix!r}; expected .pcap or .pcapng: {path}"
+        )
+    if path.is_file():
+        return
+    parent = path.parent
+    nearby: list[str] = []
+    if parent.is_dir():
+        candidates = sorted(
+            (*parent.glob("*.pcap"), *parent.glob("*.pcapng")),
+            key=lambda item: item.stat().st_mtime_ns,
+            reverse=True,
+        )
+        nearby = [candidate.name for candidate in candidates[:5]]
+    detail = f"; newest captures in that directory: {nearby}" if nearby else ""
+    raise FileNotFoundError(f"capture file does not exist: {path}{detail}")
+
+
 def analyze_file(pcap: Path, config: AppConfig, force: bool = False) -> list[dict[str, Any]]:
     """Analyze a capture and merge its redacted evidence into persistent endpoints."""
-    if not pcap.is_file() or pcap.suffix.lower() not in {".pcap", ".pcapng"}:
-        raise FileNotFoundError(f"pcap not found or unsupported: {pcap}")
+    _validate_capture_path(pcap)
 
     paths = config.create_directories()
     database = _optional_database(config, paths["state"])
@@ -251,7 +271,13 @@ def watch(config: AppConfig, once: bool = False) -> None:
     scanner = CaptureScanner(paths["incoming"], config.capture.stable_seconds)
     while True:
         for path in scanner.scan():
-            analyze_file(path, config)
+            try:
+                analyze_file(path, config)
+            except Exception:
+                # A corrupt capture or a temporary AI failure must not stop the
+                # watcher from processing later rotated files. analyze_file has
+                # already persisted the failure and logged its detailed cause.
+                LOG.exception("watch skipped failed capture %s", path)
         if once:
             return
         time.sleep(5)

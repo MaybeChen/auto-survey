@@ -360,6 +360,19 @@ def test_ai_result_validation_interface_and_openapi(tmp_path):
     assert document["request"]["bodyObserved"] is True
     spec=generate_openapi([document],tmp_path); assert spec["openapi"]=="3.1.0"; assert (tmp_path/"openapi.yaml").exists()
 
+
+def test_interface_preserves_ai_field_descriptions() -> None:
+    from src.validator.validator import validate_analysis
+
+    group = group_transactions([sample_tx()])[0]
+    result = deterministic_analysis(group).model_copy(
+        update={"field_descriptions": {"request.profile.name": "Display name"}}
+    )
+    document = build_interface(group, result, validate_analysis(group, result))
+    assert document["fieldDescriptions"] == {
+        "request.profile.name": "Display name"
+    }
+
 def test_packaged_schema_is_available():
     from importlib.resources import files
 

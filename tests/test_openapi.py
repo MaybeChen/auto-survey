@@ -110,6 +110,16 @@ def test_valid_descriptions_and_responses_are_preserved(tmp_path: Path) -> None:
     assert media["example"] == original_response["example"]
 
 
+def test_ai_field_descriptions_are_preserved_as_openapi_extension(tmp_path: Path) -> None:
+    document = interface()
+    document["fieldDescriptions"] = {"response.200.id": "Observed user ID"}
+    spec = generate_openapi([document], tmp_path)
+    operation = spec["paths"]["/users/{value}"]["get"]
+    assert operation["x-field-descriptions"] == {
+        "response.200.id": "Observed user ID"
+    }
+
+
 @pytest.mark.parametrize("example", [{}, [], 0, False, ""])
 def test_observed_falsey_json_bodies_are_preserved(
     tmp_path: Path, example: Any
