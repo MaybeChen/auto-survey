@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 
 import httpx
@@ -10,10 +11,20 @@ from src.models import EndpointAnalysisRequest, EndpointAnalysisResult
 
 from .base import AIClient
 
+LOG = logging.getLogger(__name__)
+
 
 def _request_failure(exc: httpx.RequestError) -> str:
     """Classify a transport exception without exposing URLs or credentials."""
     detail = str(exc).casefold()
+    if isinstance(exc, httpx.ProxyError):
+        if "407" in detail:
+            return "PROXY_AUTH_REQUIRED"
+        if "403" in detail:
+            return "PROXY_FORBIDDEN"
+        if "502" in detail or "503" in detail or "504" in detail:
+            return "PROXY_UPSTREAM_ERROR"
+        return "CONNECTION_ERROR_ProxyError"
     if "certificate verify failed" in detail or "certificateverifyfailed" in detail:
         return "CONNECTION_ERROR_CERTIFICATE_VERIFY"
     if "name or service not known" in detail or "getaddrinfo failed" in detail:
@@ -34,6 +45,8 @@ class HTTPAIClient(AIClient):
         retries: int = 2,
         trust_env_proxy: bool = False,
         proxy_url_env: str = "",
+        tls_verify: bool = True,
+        ca_bundle: str | None = None,
         send_response_format: bool = True,
     ) -> None:
         self.base_url = base_url.rstrip("/")
@@ -42,6 +55,8 @@ class HTTPAIClient(AIClient):
         self.retries = retries
         self.trust_env_proxy = trust_env_proxy
         self.proxy_url_env = proxy_url_env
+        self.tls_verify = tls_verify
+        self.ca_bundle = ca_bundle
         self.send_response_format = send_response_format
 
     def analyze_endpoint(
@@ -53,12 +68,17 @@ class HTTPAIClient(AIClient):
             raise RuntimeError(
                 f"AI API key environment variable {self.api_key_env} is not set"
             )
-        headers = {"Authorization": f"Bearer {key}"} if key else {}
+        headers = {"Content-Type": "application/json"}
+        if key:
+            headers["Authorization"] = f"Bearer {key}"
         proxy_url = os.environ.get(self.proxy_url_env) if self.proxy_url_env else None
         if self.proxy_url_env and not proxy_url:
             raise RuntimeError(
                 f"AI proxy environment variable {self.proxy_url_env} is not set"
             )
+        verify: bool | str = self.ca_bundle or self.tls_verify
+        if verify is False:
+            LOG.warning("AI TLS certificate and hostname verification are disabled")
         payload = request.model_dump(mode="json")
         # This boundary receives redacted samples only; it has no filesystem API.
         messages = [
@@ -88,6 +108,7 @@ class HTTPAIClient(AIClient):
                     timeout=60,
                     trust_env=self.trust_env_proxy,
                     proxy=proxy_url,
+                    verify=verify,
                 )
                 response.raise_for_status()
                 content = response.json()["choices"][0]["message"]["content"]

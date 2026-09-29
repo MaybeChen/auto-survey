@@ -35,6 +35,8 @@ def check_ai(config: AIConfig) -> dict[str, Any]:
         config.retries,
         config.trust_env_proxy,
         config.proxy_url_env,
+        config.tls_verify,
+        str(config.ca_bundle) if config.ca_bundle else None,
         config.send_response_format,
     )
     endpoint = _safe_endpoint(config.base_url)
@@ -54,6 +56,7 @@ def check_ai(config: AIConfig) -> dict[str, Any]:
             "endpoint": endpoint,
             "authenticated": bool(config.api_key_env),
             "proxyConfigured": bool(config.proxy_url_env or config.trust_env_proxy),
+            "tlsVerified": config.tls_verify or bool(config.ca_bundle),
             "error": str(exc),
         }
     return {
@@ -62,6 +65,7 @@ def check_ai(config: AIConfig) -> dict[str, Any]:
         "endpoint": endpoint,
         "authenticated": bool(config.api_key_env),
         "proxyConfigured": bool(config.proxy_url_env or config.trust_env_proxy),
+        "tlsVerified": config.tls_verify or bool(config.ca_bundle),
         "structuredOutputValid": True,
         "normalizedPath": result.normalized_path,
         "confidence": result.confidence,

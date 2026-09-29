@@ -75,6 +75,8 @@ ai:
     assert config.ai.retries == 3
     assert config.ai.trust_env_proxy is False
     assert config.ai.proxy_url_env == ""
+    assert config.ai.tls_verify is True
+    assert config.ai.ca_bundle is None
     assert config.ai.send_response_format is True
 
 
@@ -117,8 +119,9 @@ def test_ai_client_supports_explicit_anonymous_self_hosted_service(monkeypatch):
     )
     assert result.normalized_path == "/health"
     assert captured["url"] == "http://127.0.0.1:8000/v1/chat/completions"
-    assert captured["headers"] == {}
+    assert captured["headers"] == {"Content-Type": "application/json"}
     assert captured["trust_env"] is False
+    assert captured["verify"] is True
     assert captured["json"]["stream"] is False
 
 
@@ -189,6 +192,38 @@ def test_ai_client_uses_proxy_from_named_environment_variable(monkeypatch):
     )
     assert captured["proxy"] == "http://proxy.example.test:8080"
     assert captured["trust_env"] is False
+
+
+def test_ai_client_supports_explicit_tls_policy(monkeypatch):
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"choices": [{"message": {"content": json.dumps({
+                "normalized_path": "/health", "confidence": 1.0
+            })}}]}
+
+    captured = {}
+
+    def fake_post(_url, **kwargs):
+        captured.update(kwargs)
+        return Response()
+
+    monkeypatch.setattr("src.ai.client.httpx.post", fake_post)
+    client = HTTPAIClient(
+        "https://ai.example.test/v1",
+        "qwen",
+        "",
+        retries=0,
+        tls_verify=False,
+    )
+    client.analyze_endpoint(
+        EndpointAnalysisRequest(
+            host="test", method="GET", normalized_path="/health", samples=[]
+        )
+    )
+    assert captured["verify"] is False
 
 
 def test_ai_client_requires_configured_environment_variable(monkeypatch):

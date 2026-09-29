@@ -28,6 +28,8 @@ ai:
   retries: 2
   trust_env_proxy: false
   proxy_url_env: ""
+  tls_verify: true
+  ca_bundle: null
   send_response_format: true
 database: {enabled: true, url: ""}
 output: {generate_json: true, generate_openapi: true}

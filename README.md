@@ -208,6 +208,8 @@ ai:
   retries: 2
   trust_env_proxy: false
   proxy_url_env: ""
+  tls_verify: true
+  ca_bundle: null
   send_response_format: true
 ```
 
@@ -238,6 +240,8 @@ ai:
   retries: 2
   trust_env_proxy: false
   proxy_url_env: ""
+  tls_verify: true
+  ca_bundle: null
   send_response_format: false
 ```
 
@@ -293,9 +297,56 @@ Invoke-WebRequest `
 其他环境代理。若返回 HTTP 407，说明代理要求 Windows 集成认证；Postman 可以使用当前用户
 凭据，但 Python/httpx 默认不会自动执行 NTLM/Kerberos。此时应优先申请服务账号可用的代理、
 目标域名直连白名单或运维提供的认证方式，而不是把 Windows 密码写进配置文件。
+
+不要只用 `GET /models` 判断 Chat Completions 是否可用：部分网关没有 models 路由，企业代理
+也可能对不同方法或路径采用不同策略。应使用与 Postman **完全相同的 POST URL 和 JSON**
+测试。同时检查 `ProxyOverride`；Postman 的“系统代理”会遵循 WinINET 绕过列表，如果其中有
+`*.huawei.com`，Postman 实际可能对该域名直连，而不是经过 `proxyau.huawei.com:8080`：
+
+```powershell
+Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" |
+  Select-Object ProxyEnable, ProxyServer, ProxyOverride, AutoConfigURL
+```
+
+代理返回带“支持与帮助 / 客服 / 问题反馈”的 HTML 页面，表示请求已到达企业代理，但被其
+策略页拦截或上游访问失败，并不能证明模型 API 返回了错误。此时应比较 Postman Console 中
+该请求的代理/直连信息、HTTP 方法、完整 URL、Header 和 SSL verification 设置。
 `send_response_format` 控制是否发送 OpenAI 的 `response_format: {type: json_object}`。
 某些兼容服务（包括只接受你在 Postman 中展示的最小请求体的服务）不支持该参数，可设为
 `false`；客户端仍会通过 system prompt 要求 JSON，并继续用 Pydantic 严格验证响应。
+
+### 与既有 Java/OkHttp 客户端对照
+
+既有 Java 实现可以确认网关采用标准的 `POST {baseUrl}/chat/completions`、
+`Content-Type: application/json`、非流式 `choices[0].message.content` 响应。本项目现在也显式
+发送 Content-Type，并且只在环境变量中确实存在密钥时才发送 `Authorization: Bearer ...`；
+不会像某些实现那样在空密钥时发送 `Bearer `。`stream: false`、可选的
+`response_format` 和返回 JSON 校验也与该协议边界一致。
+
+Java 片段中的代理、TLS、连接池和 Windows 集成认证实际由
+`AbstractLLMClient.getHttpClient()` 决定，而不是 `Request.Builder` 决定。因此 Java 客户端能
+访问不能证明请求是直连，也不能证明无代理认证。排查网络差异时最有价值的是继续查看
+`getHttpClient()`、`LLMConfig`、JVM 启动参数（`https.proxyHost/https.proxyPort`）和实际 API
+Key 来源；流式 SSE、工具调用和 token usage 对当前非流式 Endpoint Schema 分析不是必需项。
+
+补充的 `AbstractLLMClient` 已经给出关键答案：Java 客户端无条件信任所有证书，并关闭
+hostname verification；它只在 `LLMConfig.proxyAddress` 非空时使用显式 HTTP 代理，代理仅
+支持无认证或 Basic 认证。因此 Java 能调通不能作为 TLS 正常的证据。推荐从运维取得企业
+CA PEM 文件并配置 `ca_bundle`，同时保持 `tls_verify: true`：
+
+```yaml
+ai:
+  tls_verify: true
+  ca_bundle: "D:/certs/huawei-enterprise-ca.pem"
+```
+
+仅为一次性定位“是否为证书链问题”，可临时设置 `tls_verify: false`；这会同时跳过证书与
+主机名校验，等价于 Java 中的 trust-all 行为，存在中间人攻击风险，不应作为生产配置。
+客户端会输出 WARNING，`check-ai` 也会返回 `tlsVerified: false`。测试完必须恢复为 `true`。
+
+还应查看 Java 运行时 `LLMConfig.proxyAddress` 的实际值：为空表示 Java 直连；形如
+`host:port` 表示无认证代理；形如 `username:password@host:port` 表示 Basic 代理。请勿提供
+真实密码，只需确认属于哪一种情况。
 
 配置完成后，用 `--force` 重新分析已经处理过的 pcap，才能重新调用 AI：
 

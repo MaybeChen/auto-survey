@@ -41,6 +41,7 @@ def test_check_ai_uses_synthetic_evidence_and_reports_structured_output(monkeypa
         "endpoint": "http://127.0.0.1:8000/v1/chat/completions",
         "authenticated": False,
         "proxyConfigured": False,
+        "tlsVerified": True,
         "structuredOutputValid": True,
         "normalizedPath": "/__api_survey_health__",
         "confidence": 0.9,
@@ -91,6 +92,7 @@ def test_check_ai_returns_secret_free_failure(monkeypatch):
         "endpoint": "https://ai.example.test/v1/chat/completions",
         "authenticated": True,
         "proxyConfigured": False,
+        "tlsVerified": True,
         "error": "FAILED_AI_PARSE",
     }
 
@@ -126,6 +128,29 @@ def test_ai_client_reports_safe_transport_failure(monkeypatch, failure, expected
 )
 def test_ai_client_classifies_safe_connection_details(monkeypatch, message, expected):
     failure = httpx.ConnectError(message)
+    monkeypatch.setattr(
+        "src.ai.client.httpx.post", lambda *args, **kwargs: (_ for _ in ()).throw(failure)
+    )
+    client = HTTPAIClient("https://private.example/v1", "qwen", "", retries=0)
+    with pytest.raises(RuntimeError, match=expected):
+        client.analyze_endpoint(
+            EndpointAnalysisRequest(
+                host="test", method="GET", normalized_path="/test", samples=[]
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("407 Proxy Authentication Required", "PROXY_AUTH_REQUIRED"),
+        ("403 Forbidden", "PROXY_FORBIDDEN"),
+        ("502 Bad Gateway", "PROXY_UPSTREAM_ERROR"),
+        ("proxy disconnected", "CONNECTION_ERROR_ProxyError"),
+    ],
+)
+def test_ai_client_classifies_proxy_failures(monkeypatch, message, expected):
+    failure = httpx.ProxyError(message)
     monkeypatch.setattr(
         "src.ai.client.httpx.post", lambda *args, **kwargs: (_ for _ in ()).throw(failure)
     )
