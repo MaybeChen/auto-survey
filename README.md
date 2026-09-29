@@ -190,6 +190,28 @@ Unregister-ScheduledTask -TaskName 'API Survey Agent' -Confirm:$false
 
 ## 配置与运行
 
+### 整体运行流程与启用 AI 后的变化
+
+无论是否启用 AI，前半段都是确定性流程：发现稳定 pcap → SHA256 去重与状态恢复 → tshark
+协议探测 → HTTP/1.1 字段提取 → 确定性请求/响应配对 → JSON Body 解码 → 静态资源过滤 →
+递归脱敏 → Endpoint 归一化和多样本聚合。SQLite 启用时，新样本会与历史脱敏样本合并。
+
+`ai.enabled: false` 时，本地规则根据真实样本推断基础 request/response Schema；`summary` 和
+`description` 保持空值，`unknown` 会标记语义说明需要 AI。`ai.enabled: true` 时，每个聚合后
+Endpoint 的脱敏样本和字段观测会发送给 AI；AI 可以提供接口摘要、描述、语义化路径参数名、
+请求/响应 Schema、字段说明、置信度和不确定项。原始 pcap、原始 Authorization/Cookie 和未
+脱敏 Body 不会进入 AI Client。
+
+AI 返回不会直接发布：Pydantic 先验证结构，Evidence Validator 再检查路径覆盖、真实状态码、
+请求/响应字段和示例证据。不存在的状态码或字段会成为 validation issue，并降低最终
+`confidence`。最终 Standard Interface JSON 保留真实 `observedPaths`、状态码、样本统计与示例，
+同时加入 AI 的 `summary`、`description`、`fieldDescriptions`、Schema 和 `unknown`。OpenAPI 从
+该事实层二次生成，并用 `x-field-descriptions` 保留 AI 字段说明；AI 不直接生成整份 OpenAPI。
+
+当最终置信度低于 `analysis.publish_confidence`，或样本数少于 `analysis.min_samples`，Endpoint
+状态为 `PENDING_MORE_SAMPLES`，但证据和当前接口文档仍会保存以便继续积累。AI 调用失败或
+结构化结果解析失败会记录失败并终止本次分析，不会悄悄回退后发布未经验证的 AI 内容。
+
 所有路径通过 `storage.root` 和 `pathlib` 派生。Windows/Linux 示例分别位于 `config/`。API Key 只从 `ai.api_key_env` 指定的环境变量读取；不写入 YAML 或日志。AI 默认关闭，因此无模型也能生成基础事实层。 数据库默认启用，`database.url` 留空时使用 `storage.root/state/agent.db`；如需无数据库运行，可显式设置 `database: {enabled: false, url: ""}`，此模式仍会完整生成接口 JSON、Catalog、OpenAPI 和分析报告。
 
 ### AI 配置
