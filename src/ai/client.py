@@ -11,6 +11,20 @@ from src.models import EndpointAnalysisRequest, EndpointAnalysisResult
 from .base import AIClient
 
 
+def _request_failure(exc: httpx.RequestError) -> str:
+    """Classify a transport exception without exposing URLs or credentials."""
+    detail = str(exc).casefold()
+    if "certificate verify failed" in detail or "certificateverifyfailed" in detail:
+        return "CONNECTION_ERROR_CERTIFICATE_VERIFY"
+    if "name or service not known" in detail or "getaddrinfo failed" in detail:
+        return "CONNECTION_ERROR_DNS"
+    if "connection refused" in detail or "actively refused" in detail:
+        return "CONNECTION_ERROR_REFUSED"
+    if "network is unreachable" in detail or "no route to host" in detail:
+        return "CONNECTION_ERROR_NETWORK_UNREACHABLE"
+    return f"CONNECTION_ERROR_{type(exc).__name__}"
+
+
 class HTTPAIClient(AIClient):
     def __init__(
         self,
@@ -19,12 +33,14 @@ class HTTPAIClient(AIClient):
         api_key_env: str = "AI_API_KEY",
         retries: int = 2,
         trust_env_proxy: bool = False,
+        send_response_format: bool = True,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key_env = api_key_env
         self.retries = retries
         self.trust_env_proxy = trust_env_proxy
+        self.send_response_format = send_response_format
 
     def analyze_endpoint(
         self, request: EndpointAnalysisRequest
@@ -51,14 +67,17 @@ class HTTPAIClient(AIClient):
         failure = "UNKNOWN_ERROR"
         for _ in range(self.retries + 1):
             try:
+                request_json = {
+                    "model": self.model,
+                    "messages": messages,
+                    "stream": False,
+                }
+                if self.send_response_format:
+                    request_json["response_format"] = {"type": "json_object"}
                 response = httpx.post(
                     f"{self.base_url}/chat/completions",
                     headers=headers,
-                    json={
-                        "model": self.model,
-                        "messages": messages,
-                        "response_format": {"type": "json_object"},
-                    },
+                    json=request_json,
                     timeout=60,
                     trust_env=self.trust_env_proxy,
                 )
@@ -70,7 +89,7 @@ class HTTPAIClient(AIClient):
             except httpx.TimeoutException:
                 failure = "TIMEOUT"
             except httpx.RequestError as exc:
-                failure = f"CONNECTION_ERROR_{type(exc).__name__}"
+                failure = _request_failure(exc)
             except (KeyError, IndexError, TypeError):
                 failure = "INVALID_CHAT_COMPLETIONS_RESPONSE"
             except ValueError as exc:

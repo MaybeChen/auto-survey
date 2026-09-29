@@ -113,6 +113,29 @@ def test_ai_client_reports_safe_transport_failure(monkeypatch, failure, expected
         )
 
 
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed", "CERTIFICATE_VERIFY"),
+        ("[Errno 11001] getaddrinfo failed", "CONNECTION_ERROR_DNS"),
+        ("[WinError 10061] target machine actively refused it", "CONNECTION_ERROR_REFUSED"),
+        ("[Errno 101] Network is unreachable", "CONNECTION_ERROR_NETWORK_UNREACHABLE"),
+    ],
+)
+def test_ai_client_classifies_safe_connection_details(monkeypatch, message, expected):
+    failure = httpx.ConnectError(message)
+    monkeypatch.setattr(
+        "src.ai.client.httpx.post", lambda *args, **kwargs: (_ for _ in ()).throw(failure)
+    )
+    client = HTTPAIClient("https://private.example/v1", "qwen", "", retries=0)
+    with pytest.raises(RuntimeError, match=expected):
+        client.analyze_endpoint(
+            EndpointAnalysisRequest(
+                host="test", method="GET", normalized_path="/test", samples=[]
+            )
+        )
+
+
 def test_ai_client_reports_http_status_without_response_body(monkeypatch):
     request = httpx.Request("POST", "http://127.0.0.1:8000/v1/chat/completions")
     response = httpx.Response(400, request=request, text="sensitive provider details")

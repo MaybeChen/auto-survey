@@ -34,6 +34,7 @@ def check_ai(config: AIConfig) -> dict[str, Any]:
         config.api_key_env,
         config.retries,
         config.trust_env_proxy,
+        config.send_response_format,
     )
     endpoint = _safe_endpoint(config.base_url)
     request = EndpointAnalysisRequest(

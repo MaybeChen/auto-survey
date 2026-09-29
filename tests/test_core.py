@@ -74,6 +74,7 @@ ai:
     assert config.ai.api_key_env == "SURVEY_AI_KEY"
     assert config.ai.retries == 3
     assert config.ai.trust_env_proxy is False
+    assert config.ai.send_response_format is True
 
 
 def test_ai_client_supports_explicit_anonymous_self_hosted_service(monkeypatch):
@@ -117,6 +118,42 @@ def test_ai_client_supports_explicit_anonymous_self_hosted_service(monkeypatch):
     assert captured["url"] == "http://127.0.0.1:8000/v1/chat/completions"
     assert captured["headers"] == {}
     assert captured["trust_env"] is False
+    assert captured["json"]["stream"] is False
+
+
+def test_ai_client_can_omit_unsupported_response_format(monkeypatch):
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "choices": [{"message": {"content": json.dumps({
+                    "normalized_path": "/health", "confidence": 1.0
+                })}}]
+            }
+
+    captured = {}
+
+    def fake_post(_url, **kwargs):
+        captured.update(kwargs)
+        return Response()
+
+    monkeypatch.setattr("src.ai.client.httpx.post", fake_post)
+    client = HTTPAIClient(
+        "https://ai.example.test/v1",
+        "qwen",
+        "",
+        retries=0,
+        send_response_format=False,
+    )
+    client.analyze_endpoint(
+        EndpointAnalysisRequest(
+            host="test", method="GET", normalized_path="/health", samples=[]
+        )
+    )
+    assert captured["json"]["stream"] is False
+    assert "response_format" not in captured["json"]
 
 
 def test_ai_client_requires_configured_environment_variable(monkeypatch):

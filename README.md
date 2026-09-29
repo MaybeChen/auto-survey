@@ -207,6 +207,7 @@ ai:
   api_key_env: "AI_API_KEY"
   retries: 2
   trust_env_proxy: false
+  send_response_format: true
 ```
 
 `model` 必须是服务端接受的模型名或部署名。`retries` 是首次请求失败后的额外重试次数。
@@ -235,6 +236,7 @@ ai:
   api_key_env: ""
   retries: 2
   trust_env_proxy: false
+  send_response_format: false
 ```
 
 只有确认模型服务所在网络边界可信且服务本身确实不要求鉴权时才应使用此模式。如果填写
@@ -242,6 +244,9 @@ ai:
 `trust_env_proxy: false` 是默认值，表示 AI 请求不读取 `HTTP_PROXY`、`HTTPS_PROXY` 和
 `ALL_PROXY`，适合 localhost 或内网自部署模型，可避免请求被系统代理错误转发。只有访问
 外部模型确实必须经过环境代理时才改为 `true`；也可以保持为 `false`，由网络层直接路由。
+`send_response_format` 控制是否发送 OpenAI 的 `response_format: {type: json_object}`。
+某些兼容服务（包括只接受你在 Postman 中展示的最小请求体的服务）不支持该参数，可设为
+`false`；客户端仍会通过 system prompt 要求 JSON，并继续用 Pydantic 严格验证响应。
 
 配置完成后，用 `--force` 重新分析已经处理过的 pcap，才能重新调用 AI：
 
@@ -293,6 +298,22 @@ Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
 `0.0.0.0:8000->8000/tcp`；如果在 WSL 中，应先在 WSL 内使用 `curl` 测试，再确认 Windows
 能访问该端口。服务只监听 `127.0.0.1` 时只能由同一台主机访问；远程部署应按安全策略监听
 可达网卡并配置防火墙，切勿无鉴权暴露到不可信网络。
+
+对于 `https://tpsp.dev.huawei.com/...` 这类远程 HTTPS 地址，应按远程服务排查，不能用
+localhost 的端口监听命令代替。先执行：
+
+```powershell
+Resolve-DnsName tpsp.dev.huawei.com
+Test-NetConnection tpsp.dev.huawei.com -Port 443
+Invoke-WebRequest -Method Get -Uri "https://tpsp.dev.huawei.com/llm/qwen3.6/v1/models"
+```
+
+如果 DNS 或 443 端口不通，应先连接所需 VPN/办公网络并确认防火墙策略。如果浏览器可访问
+但 Python 报 `CONNECTION_ERROR_CERTIFICATE_VERIFY`，通常是企业 TLS 根证书没有进入 Python
+使用的 CA 信任链，应向运维获取 CA 文件并正确安装，不建议关闭 TLS 校验。如果必须通过
+企业代理访问，应设置 `trust_env_proxy: true`，同时确保 `HTTPS_PROXY` 指向可用代理；出现
+`ProxyError` 说明代理本身不可连接或不允许该目标。服务即使“不需要 API Key”，也仍可能
+要求 VPN、源 IP 白名单、客户端证书或企业 SSO，这些与 `api_key_env` 是不同的访问控制。
 
 可先绕过本项目，用 PowerShell 直接检查服务的模型列表和 Chat Completions 端点。以下
 示例适用于无需鉴权的本地服务；地址应与配置中的 `base_url` 一致：

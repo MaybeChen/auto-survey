@@ -27,5 +27,6 @@ ai:
   api_key_env: "AI_API_KEY"
   retries: 2
   trust_env_proxy: false
+  send_response_format: true
 database: {enabled: true, url: ""}
 output: {generate_json: true, generate_openapi: true}
